@@ -16,22 +16,22 @@ struct ShotExporterTests {
     }
 
     private func write(_ format: ShotExporter.Format) throws -> [String] {
-        try ShotExporter.write(original: image, translated: image, markdown: "# Test\n", format: format, directory: directory, baseName: "Report")
+        try ShotExporter.write(original: image, translated: image, markdown: "# Test\n", pdf: Data("%PDF".utf8), format: format, directory: directory, baseName: "Report")
             .map(\.lastPathComponent)
     }
 
-    @Test func imageAndTextWritesThreeFilesSideBySide() throws {
-        #expect(try write(.imageAndText) == ["Report-original.png", "Report-translated.png", "Report.md"])
-    }
-
     @Test func eachFormatWritesOnlyItsFiles() throws {
+        #expect(try write(.pdf) == ["Report.pdf"])
         #expect(try write(.image) == ["Report-original.png", "Report-translated.png"])
         #expect(try write(.text) == ["Report.md"])
     }
 
     @Test func existingFilesAreNeverReplaced() throws {
         _ = try write(.text)
-        #expect(try write(.imageAndText) == ["Report 2-original.png", "Report 2-translated.png", "Report 2.md"])
+        #expect(try write(.pdf) == ["Report.pdf"])
+        #expect(try write(.text) == ["Report 2.md"])
+        _ = try write(.image)
+        #expect(try write(.image) == ["Report 2-original.png", "Report 2-translated.png"])
     }
 
     @Test func markdownQuotesTheJapaneseAndFlagsLowConfidence() {

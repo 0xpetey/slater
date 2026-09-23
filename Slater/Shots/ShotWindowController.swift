@@ -129,12 +129,14 @@ final class ShotWindowController: Identifiable {
             guard let self, response == .OK, let url = savePanel.url else { return }
             MainActor.assumeIsolated {
                 ShotExporter.Format.lastUsed = choice.format
-                let name = ["png", "md"].contains(url.pathExtension.lowercased()) ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
+                let name = ["pdf", "png", "md"].contains(url.pathExtension.lowercased()) ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
                 do {
+                    let translated = renderTranslatedImage() ?? shot.image
                     try ShotExporter.write(
                         original: shot.image,
-                        translated: renderTranslatedImage() ?? shot.image,
+                        translated: translated,
                         markdown: shot.markdown(title: name),
+                        pdf: choice.format == .pdf ? ShotPDF.make(shot: shot, translatedImage: translated, title: name) : Data(),
                         format: choice.format,
                         directory: url.deletingLastPathComponent(),
                         baseName: name
