@@ -35,7 +35,8 @@ Environment: macOS 26.6, Xcode 26.6, Swift 6.3. The app **requires macOS 26.4**:
 
 | Component | Responsibility | Key APIs |
 |---|---|---|
-| `SlaterApp` | App entry point, `MenuBarExtra` (including the Open Shots section), Settings scene, `LSUIElement = YES` | SwiftUI `MenuBarExtra`, `SMAppService` (launch at login) |
+| `SlaterApp` | App entry point, Settings scene, `LSUIElement = YES` | SwiftUI `Settings`, `SMAppService` (launch at login) |
+| `StatusItemController` | The lizard in the menu bar, which wiggles when the pointer reaches it, and the menu (Take Shot, Finish Setup, Open Shots, Close All, Settings, Quit), rebuilt each time it opens. AppKit, because SwiftUI's `MenuBarExtra` renders its label as a still picture and gets no hover events. | `NSStatusItem` hosting an `NSImageView` with `addSymbolEffect(.wiggle)`, `NSTrackingArea`, `NSMenu` |
 | `HotkeyManager` | Registers the global shortcut | [`KeyboardShortcuts`](https://github.com/sindresorhus/KeyboardShortcuts) package (includes a recorder UI for Settings) |
 | `ScreenCapturer` | Captures each display at native resolution, excluding Slater's own windows. Keeps the display list fetched ahead of time and makes a throwaway capture at launch, because the first capture in a process costs about 70 ms more. | ScreenCaptureKit: `SCShareableContent`, `SCContentFilter(display:excludingApplications: [Slater], exceptingWindows: [])`, `SCScreenshotManager.captureImage(contentFilter:configuration:)` |
 | `SelectionOverlayController` | One borderless, transparent `NSPanel` per screen at `.screenSaver` level, shown the instant the hotkey is pressed; frozen with the Captures when they land; draws the rectangle as you drag. A box finished before the capture lands is kept and used once it does. | `NSPanel`, `NSView` mouse events, `NSCursor.crosshair` |
@@ -68,7 +69,7 @@ slater/
     OCR/        ImagePreprocessor.swift, TextRecognizer.swift, BlockGrouper.swift
     Translate/  Translator.swift
     Shots/      Shot.swift, ShotStore.swift, ShotWindowController.swift, ShotView.swift, DetailsPanel.swift, ShotExporter.swift
-    UI/         MenuContent.swift, SettingsView.swift, OnboardingView.swift
+    UI/         StatusItemController.swift, SettingsView.swift, OnboardingView.swift, NoticePanel.swift
     Util/       CoordinateMapper.swift, ColorSampler.swift, FitText.swift
   SlaterTests/  BlockGrouperTests, CoordinateMapperTests, fixture images (web, PDF, spreadsheet, poor scan)
 ```
