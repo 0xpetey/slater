@@ -4,7 +4,7 @@ import Symbols
 
 /// The lizard in the menu bar and its menu. AppKit rather than SwiftUI's `MenuBarExtra`,
 /// because that renders its label as a still picture and gets no hover events, and this lizard
-/// wiggles when the pointer reaches it.
+/// spins while the pointer is over it.
 @MainActor
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let appState: AppState
@@ -43,10 +43,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     // AppKit sends the tracking area's owner `mouseEntered:`. Swift would derive
     // `mouseEnteredWith:` from the label on a non-override, so the selectors are spelled out.
     @objc(mouseEntered:) func mouseEntered(with event: NSEvent) {
-        iconView.addSymbolEffect(.wiggle, options: .nonRepeating)
+        iconView.addSymbolEffect(.rotate, options: .repeating)
     }
 
-    @objc(mouseExited:) func mouseExited(with event: NSEvent) {}
+    @objc(mouseExited:) func mouseExited(with event: NSEvent) {
+        iconView.removeSymbolEffect(ofType: .rotate)
+    }
 
     /// Rebuilt each time it opens, so the Open Shots list is current.
     func menuNeedsUpdate(_ menu: NSMenu) {
