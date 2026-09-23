@@ -141,11 +141,11 @@ private struct TranslatedPatch: View {
             .rotationEffect(.degrees(turn ? 90 : 0))
             .frame(width: size.width, height: size.height)
             .background(Color(red: background.red, green: background.green, blue: background.blue))
-            .overlay(alignment: .bottom) {
+            .overlay {
+                // A dashed orange box marks a Block whose OCR may be wrong.
                 if isLowConfidence {
-                    HorizontalLine()
-                        .stroke(Color.orange, style: StrokeStyle(lineWidth: 1.5, dash: [3, 2]))
-                        .frame(height: 1.5)
+                    Rectangle()
+                        .strokeBorder(Color.orange, style: StrokeStyle(lineWidth: 1.5, dash: [3, 2]))
                 }
             }
             .clipped()
@@ -176,14 +176,5 @@ private struct TranslatedPatch: View {
             .foregroundStyle(background.luminance > 0.5 ? Color.black : Color.white)
             .padding(.horizontal, FitText.padding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-    }
-}
-
-private struct HorizontalLine: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        }
     }
 }
