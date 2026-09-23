@@ -7,18 +7,27 @@ import Observation
 @MainActor
 @Observable
 final class Shot {
-    enum State { case translating, translated, failed }
+    enum State { case notStarted, translating, translated, failed }
 
-    /// The translation of one distinct Japanese text. Blocks with the same text share a slot, so
-    /// the text is translated once, and each patch re-renders only when its own slot fills.
+    /// The translations of one distinct Japanese text, one per model. Blocks with the same
+    /// text share a slot, so the text is translated once per model, and each patch re-renders
+    /// only when its own slot changes.
     @MainActor
     @Observable
     final class TranslationSlot {
         let source: String
-        var text: String?
+        private(set) var texts: [Translator.Model: String] = [:]
 
         init(source: String) {
             self.source = source
+        }
+
+        func text(for model: Translator.Model) -> String? {
+            texts[model]
+        }
+
+        func set(_ text: String, for model: Translator.Model) {
+            texts[model] = text
         }
     }
 
@@ -30,11 +39,12 @@ final class Shot {
     private(set) var patches: [Patch] = []
     /// Keyed by the Japanese text.
     private(set) var slots: [String: TranslationSlot] = [:]
-    /// Texts sent to the translator that haven't come back yet.
-    var pendingTexts: Set<String> = []
-    var state = State.translating
-    /// The model the translations came from (ADR 0003).
-    var model = Translator.Model.fast
+    /// Texts sent to the translator, per model, that haven't come back yet.
+    var pendingTexts: [Translator.Model: Set<String>] = [:]
+    private(set) var states: [Translator.Model: State] = [:]
+    /// Which model's translations the Shot shows, copies and saves (ADR 0003). The other
+    /// model's translations, if any, are kept for switching back.
+    var displayedModel = Translator.Model.fast
     /// The corrected OCR reading has been applied (or wasn't needed), so the text is final.
     var isVerified = false
     private let sampler: ColorSampler
@@ -54,7 +64,9 @@ final class Shot {
         for text in texts where slots[text] == nil {
             slots[text] = TranslationSlot(source: text)
         }
-        pendingTexts.formIntersection(texts)
+        for model in pendingTexts.keys {
+            pendingTexts[model]?.formIntersection(texts)
+        }
         patches = ShotLayout.patches(
             for: blocks,
             indices: japaneseBlockIndices,
@@ -73,14 +85,31 @@ final class Shot {
         slots[blocks[blockIndex].text]
     }
 
-    func setTranslation(_ translation: String, for source: String) {
-        slots[source]?.text = translation
+    func setTranslation(_ translation: String, for source: String, model: Translator.Model) {
+        slots[source]?.set(translation, for: model)
     }
 
-    /// English for each translated Japanese Block, keyed by index into `blocks`.
+    func state(for model: Translator.Model) -> State {
+        states[model] ?? .notStarted
+    }
+
+    func setState(_ state: State, for model: Translator.Model) {
+        states[model] = state
+    }
+
+    /// The displayed model's translation state.
+    var state: State {
+        state(for: displayedModel)
+    }
+
+    func translation(for blockIndex: Int, model: Translator.Model? = nil) -> String? {
+        slot(for: blockIndex)?.text(for: model ?? displayedModel)
+    }
+
+    /// The displayed model's English for each translated Japanese Block, keyed by index into `blocks`.
     var translations: [Int: String] {
         Dictionary(uniqueKeysWithValues: japaneseBlockIndices.compactMap { index in
-            slot(for: index)?.text.map { (index, $0) }
+            translation(for: index).map { (index, $0) }
         })
     }
 

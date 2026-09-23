@@ -1,6 +1,23 @@
 import SwiftUI
 @preconcurrency import Translation
 
+/// What a Shot window shows: the original Japanese, or one model's translations.
+enum ShotDisplay: Hashable {
+    case original, fast, accurate
+
+    init(model: Translator.Model) {
+        self = model == .fast ? .fast : .accurate
+    }
+
+    var model: Translator.Model? {
+        switch self {
+        case .original: nil
+        case .fast: .fast
+        case .accurate: .accurate
+        }
+    }
+}
+
 /// The Shot's frozen image with an English patch over each Japanese Block.
 struct ShotView: View {
     let shot: Shot
@@ -9,7 +26,7 @@ struct ShotView: View {
     /// Rendering for a saved image: translations only, no controls.
     var isExporting = false
     var onSave: () -> Void = {}
-    var onRerunWithAccurate: () -> Void = {}
+    var onSelect: (ShotDisplay) -> Void = { _ in }
     let onClose: () -> Void
     @State private var isHovering = false
 
@@ -23,7 +40,7 @@ struct ShotView: View {
             if isExporting || !state.showsOriginal {
                 ForEach(shot.patches) { patch in
                     if let slot = shot.slot(for: patch.index) {
-                        PatchView(patch: patch, slot: slot, isLowConfidence: shot.blocks[patch.index].isLowConfidence)
+                        PatchView(patch: patch, slot: slot, model: shot.displayedModel, isLowConfidence: shot.blocks[patch.index].isLowConfidence)
                             .frame(width: patch.frame.width, height: patch.frame.height)
                             .offset(x: patch.frame.minX, y: patch.frame.minY)
                     }
@@ -46,21 +63,28 @@ struct ShotView: View {
             }
         }
         .onHover { isHovering = $0 }
-        // Asks macOS to download the Accurate model, showing its own confirmation dialog, then
-        // reruns the Shot with it.
-        .translationTask(state.accurateDownload) { session in
+        // Asks macOS to download a model, showing its own confirmation dialog, then shows the
+        // Shot with it.
+        .translationTask(state.downloadConfiguration) { session in
             try? await session.prepareTranslation()
-            state.accurateDownload = nil
+            let model = state.downloadModel
+            state.downloadConfiguration = nil
+            state.downloadModel = nil
             await translator.refreshModels()
-            if translator.status(of: .accurate) == .installed {
-                await translator.translate(shot, using: .accurate, replacingExisting: true)
+            if let model, translator.status(of: model) == .installed {
+                onSelect(ShotDisplay(model: model))
             }
         }
     }
 
+    private var selection: ShotDisplay {
+        state.showsOriginal ? .original : ShotDisplay(model: shot.displayedModel)
+    }
+
     private var controls: some View {
         HStack(spacing: 4) {
-            // Busy until every translation is in and the corrected OCR reading has been applied.
+            // Busy until the displayed model's translations are in and the corrected OCR
+            // reading has been applied.
             if shot.state == .translating || !shot.isVerified {
                 ProgressView().controlSize(.small)
             } else if shot.state == .failed {
@@ -69,18 +93,20 @@ struct ShotView: View {
                     .help("Translation failed")
             }
             if isHovering {
-                if shot.model == .fast && translator.status(of: .accurate) != .unsupported {
-                    Button(action: onRerunWithAccurate) {
-                        Text("Accurate")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .frame(height: 16)
-                            .background(.black.opacity(0.6), in: .capsule)
+                Picker("View", selection: Binding(get: { selection }, set: { onSelect($0) })) {
+                    Text("Original").tag(ShotDisplay.original)
+                    if translator.status(of: .fast) != .unsupported {
+                        Text("Fast").tag(ShotDisplay.fast)
                     }
-                    .buttonStyle(.plain)
-                    .help("Translate again with the Accurate model (A)")
+                    if translator.status(of: .accurate) != .unsupported {
+                        Text("Accurate").tag(ShotDisplay.accurate)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.mini)
+                .fixedSize()
+                .help("Show the original (O), or the Fast (F) or Accurate (A) translation")
                 Button(action: onSave) {
                     Image(systemName: "square.and.arrow.down.fill")
                         .foregroundStyle(.white)
@@ -109,10 +135,11 @@ struct ShotView: View {
 private struct PatchView: View {
     let patch: Patch
     let slot: Shot.TranslationSlot
+    let model: Translator.Model
     let isLowConfidence: Bool
 
     var body: some View {
-        if let translation = slot.text {
+        if let translation = slot.text(for: model) {
             TranslatedPatch(patch: patch, translation: translation, isLowConfidence: isLowConfidence)
         }
     }

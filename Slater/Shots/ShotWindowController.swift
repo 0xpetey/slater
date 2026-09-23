@@ -36,7 +36,7 @@ final class ShotWindowController: Identifiable {
             state: viewState,
             translator: translator,
             onSave: { [weak self] in self?.save() },
-            onRerunWithAccurate: { [weak self] in self?.rerunWithAccurate() },
+            onSelect: { [weak self] display in self?.select(display) },
             onClose: { [weak self] in self?.close() }
         ))
         container.onKeyDown = { [weak self] event in self?.keyDown(event) ?? false }
@@ -56,16 +56,22 @@ final class ShotWindowController: Identifiable {
         onClose(self)
     }
 
-    /// Translates the Shot again with the Accurate model, replacing the Fast translations as
-    /// each new one lands. If Accurate isn't installed yet, asks macOS to download it first.
-    func rerunWithAccurate() {
-        guard shot.model == .fast else { return }
-        switch translator.status(of: .accurate) {
+    /// Shows the original, or one model's translations, translating with that model first if
+    /// this Shot hasn't used it yet. If the model isn't installed, asks macOS to download it.
+    func select(_ display: ShotDisplay) {
+        guard let model = display.model else {
+            viewState.showsOriginal = true
+            return
+        }
+        switch translator.status(of: model) {
         case .installed:
-            Task { await translator.translate(shot, using: .accurate, replacingExisting: true) }
+            viewState.showsOriginal = false
+            shot.displayedModel = model
+            Task { await translator.translate(shot, using: model) }
         case .needsDownload:
             NSApp.activate()
-            viewState.accurateDownload = Translator.Model.accurate.downloadConfiguration
+            viewState.downloadModel = model
+            viewState.downloadConfiguration = model.downloadConfiguration
         case .checking, .unsupported:
             break
         }
@@ -80,7 +86,7 @@ final class ShotWindowController: Identifiable {
         switch event.keyCode {
         case 53: // Esc
             close()
-        case 49: // Space: tap to toggle, hold to peek
+        case 49: // Space: tap to toggle the original, hold to peek at it
             if !event.isARepeat {
                 viewState.showsOriginal.toggle()
                 spaceDownAt = event.timestamp
@@ -88,7 +94,9 @@ final class ShotWindowController: Identifiable {
         default:
             switch event.charactersIgnoringModifiers {
             case "d": showDetails()
-            case "a": rerunWithAccurate()
+            case "o": select(.original)
+            case "f": select(.fast)
+            case "a": select(.accurate)
             default: return false
             }
         }
@@ -138,7 +146,7 @@ final class ShotWindowController: Identifiable {
         }
     }
 
-    /// The Shot as it looks with translations, at the original image's resolution.
+    /// The Shot as it looks with the displayed model's translations, at the original image's resolution.
     private func renderTranslatedImage() -> CGImage? {
         let renderer = ImageRenderer(content: ShotView(shot: shot, state: viewState, translator: translator, isExporting: true, onClose: {}))
         renderer.scale = CGFloat(shot.image.width) / shot.screenRect.width
@@ -147,7 +155,9 @@ final class ShotWindowController: Identifiable {
 
     private func showDetails() {
         if details == nil {
-            details = DetailsPanelController(shot: shot, onRerunWithAccurate: { [weak self] in self?.rerunWithAccurate() })
+            details = DetailsPanelController(shot: shot, translator: translator, onSelectModel: { [weak self] model in
+                self?.select(ShotDisplay(model: model))
+            })
         }
         details?.show()
     }
@@ -157,8 +167,9 @@ final class ShotWindowController: Identifiable {
 @Observable
 final class ShotViewState {
     var showsOriginal = false
-    /// Set to ask macOS to download the Accurate model; the Shot view runs the download.
-    var accurateDownload: TranslationSession.Configuration?
+    /// Set to ask macOS to download a model; the Shot view runs the download, then shows it.
+    var downloadModel: Translator.Model?
+    var downloadConfiguration: TranslationSession.Configuration?
 }
 
 @MainActor

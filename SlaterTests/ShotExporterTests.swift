@@ -41,7 +41,7 @@ struct ShotExporterTests {
             Block(lines: [Line(text: "担当者", bounds: CGRect(x: 0, y: 40, width: 10, height: 10), isLowConfidence: true)]),
         ]
         let shot = Shot(image: image, screenRect: .zero, blocks: blocks)
-        shot.setTranslation("Item number", for: "品番")
+        shot.setTranslation("Item number", for: "品番", model: .fast)
         #expect(shot.markdown(title: "Report") == """
             # Report
 

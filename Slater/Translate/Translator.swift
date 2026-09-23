@@ -94,31 +94,32 @@ final class Translator {
         Task { _ = try? await session.translate("準備") }
     }
 
-    /// Translates the Shot's Japanese Blocks, in reading order and each distinct text once,
-    /// filling in the Shot as results arrive. Normally only untranslated texts are sent, so it's
-    /// safe to call again after the corrected reading changes some Blocks. With
-    /// `replacingExisting`, every text is sent again, which is how a Shot translated with Fast
-    /// is rerun with Accurate: the old translations stay visible until each new one lands.
-    func translate(_ shot: Shot, using requested: Model? = nil, replacingExisting: Bool = false) async {
-        let model = requested ?? activeModel
+    /// Translates the Shot's Japanese Blocks with one model, in reading order and each distinct
+    /// text once, filling in the Shot as results arrive. Only texts that model hasn't translated
+    /// yet are sent, so it's safe to call again after the corrected reading changes some Blocks,
+    /// or when the user switches the Shot to the other model (ADR 0003). Defaults to the model
+    /// the Shot displays.
+    func translate(_ shot: Shot, using requested: Model? = nil) async {
+        let model = requested ?? (status(of: shot.displayedModel) == .installed ? shot.displayedModel : activeModel)
         guard status(of: model) == .installed else {
-            shot.state = .failed
+            shot.setState(.failed, for: model)
             logger.error("No \(model.title, privacy: .public) model installed")
             return
         }
+        let pending = shot.pendingTexts[model] ?? []
         var texts: [String] = []
         for index in shot.japaneseBlockIndices {
             let text = shot.blocks[index].text
-            let wanted = replacingExisting || (shot.slots[text]?.text == nil && !shot.pendingTexts.contains(text))
-            if wanted, !texts.contains(text) { texts.append(text) }
+            if shot.slots[text]?.text(for: model) == nil, !pending.contains(text), !texts.contains(text) {
+                texts.append(text)
+            }
         }
-        shot.model = model
         guard !texts.isEmpty else {
-            if shot.pendingTexts.isEmpty { shot.state = .translated }
+            if pending.isEmpty { shot.setState(.translated, for: model) }
             return
         }
-        shot.pendingTexts.formUnion(texts)
-        shot.state = .translating
+        shot.pendingTexts[model, default: []].formUnion(texts)
+        shot.setState(.translating, for: model)
 
         let requests = texts.enumerated().map { number, text in
             TranslationSession.Request(sourceText: text, clientIdentifier: String(number))
@@ -131,13 +132,13 @@ final class Translator {
                 firstResult = firstResult ?? ContinuousClock.now - started
                 guard let identifier = response.clientIdentifier, let number = Int(identifier) else { continue }
                 let text = texts[number]
-                shot.setTranslation(Self.tidy(response.targetText, source: text), for: text)
-                shot.pendingTexts.remove(text)
+                shot.setTranslation(Self.tidy(response.targetText, source: text), for: text, model: model)
+                shot.pendingTexts[model]?.remove(text)
             }
-            if shot.pendingTexts.isEmpty { shot.state = .translated }
+            if (shot.pendingTexts[model] ?? []).isEmpty { shot.setState(.translated, for: model) }
         } catch {
-            shot.pendingTexts.subtract(texts)
-            shot.state = .failed
+            shot.pendingTexts[model]?.subtract(texts)
+            shot.setState(.failed, for: model)
             logger.error("Translation failed: \(error.localizedDescription, privacy: .public)")
             await refreshModels()
         }

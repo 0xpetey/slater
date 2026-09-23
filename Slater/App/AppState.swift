@@ -129,6 +129,7 @@ final class AppState {
 
         let shot = Shot(image: crop, screenRect: globalRect, blocks: blocks)
         shot.isVerified = isVerified
+        shot.displayedModel = translator.activeModel
         shots.open(shot)
         // Timings and counts only. Never log recognized text: the log is written to disk (ADR 0001).
         logger.notice("""

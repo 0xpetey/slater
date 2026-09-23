@@ -6,7 +6,7 @@ import SwiftUI
 final class DetailsPanelController {
     private let panel: NSPanel
 
-    init(shot: Shot, onRerunWithAccurate: @escaping () -> Void) {
+    init(shot: Shot, translator: Translator, onSelectModel: @escaping (Translator.Model) -> Void) {
         panel = NSPanel(
             contentRect: CGRect(x: 0, y: 0, width: 460, height: 360),
             styleMask: [.titled, .closable, .resizable, .utilityWindow],
@@ -16,7 +16,7 @@ final class DetailsPanelController {
         panel.title = "Shot Details"
         panel.isReleasedWhenClosed = false
         panel.level = .floating
-        panel.contentViewController = NSHostingController(rootView: DetailsView(shot: shot, onRerunWithAccurate: onRerunWithAccurate))
+        panel.contentViewController = NSHostingController(rootView: DetailsView(shot: shot, translator: translator, onSelectModel: onSelectModel))
         // Open beside the Shot rather than over it, so the two can be compared.
         panel.setFrameTopLeftPoint(CGPoint(x: shot.screenRect.maxX + 12, y: shot.screenRect.maxY))
     }
@@ -32,23 +32,24 @@ final class DetailsPanelController {
 
 private struct DetailsView: View {
     let shot: Shot
-    let onRerunWithAccurate: () -> Void
+    let translator: Translator
+    let onSelectModel: (Translator.Model) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
+                Picker("Model", selection: Binding(get: { shot.displayedModel }, set: { onSelectModel($0) })) {
+                    ForEach(Translator.Model.allCases.filter { translator.status(of: $0) != .unsupported }) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
                 if shot.state == .translating {
                     ProgressView().controlSize(.small)
                     Text("Translating…").foregroundStyle(.secondary)
                 } else if shot.state == .failed {
                     Label("Translation failed", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
-                } else {
-                    Text("\(shot.model.title) model").foregroundStyle(.secondary)
-                }
-                if shot.model == .fast {
-                    Button("Rerun with Accurate", action: onRerunWithAccurate)
-                        .disabled(shot.state == .translating)
                 }
                 Spacer()
                 Button("Copy English") { copy(shot.englishText) }
