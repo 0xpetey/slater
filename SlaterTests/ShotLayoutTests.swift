@@ -10,7 +10,7 @@ struct FitTextTests {
     }
 
     @Test func longerTranslationShrinksToFit() {
-        let fit = FitText.fit("Due to changes in specifications, a re-quote is required.", in: CGSize(width: 140, height: 36), lineHeight: 15)
+        let fit = FitText.fit("Due to changes in specifications, a re-quote is required.", in: CGSize(width: 140, height: 44), lineHeight: 15)
         #expect(fit.fontSize >= FitText.minimumSize && fit.fontSize < 12)
         #expect(!fit.isTruncated)
     }

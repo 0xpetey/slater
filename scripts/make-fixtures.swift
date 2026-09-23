@@ -2,6 +2,7 @@
 // Run from the repo root: swift scripts/make-fixtures.swift
 import AppKit
 import CoreImage
+import CoreText
 
 let outputDirectory = URL(fileURLWithPath: "SlaterTests/Fixtures")
 
@@ -84,6 +85,33 @@ let roster = render("roster", size: CGSize(width: 260, height: 90)) { context in
     }
 }
 save(roster, "roster.png")
+
+// Vertical writing (縦書き): columns read top to bottom, right to left. The first sentence
+// wraps across three columns; the fourth column is a separate sentence.
+func verticalText(_ columns: [String], in rect: CGRect, context: CGContext, fontSize: CGFloat = 16) {
+    let attributed = NSAttributedString(string: columns.joined(separator: "\n"), attributes: [
+        .font: CTFontCreateWithName("HiraginoSans-W3" as CFString, fontSize, nil),
+        .verticalGlyphForm: true,
+        .foregroundColor: NSColor.black.cgColor,
+    ])
+    let framesetter = CTFramesetterCreateWithAttributedString(attributed)
+    let frame = CTFramesetterCreateFrame(
+        framesetter, CFRange(), CGPath(rect: rect, transform: nil),
+        [kCTFrameProgressionAttributeName: CTFrameProgression.rightToLeft.rawValue] as CFDictionary
+    )
+    // Core Text draws with a bottom-left origin, so undo the top-left flip for this call.
+    context.saveGState()
+    context.translateBy(x: 0, y: rect.maxY + rect.minY)
+    context.scaleBy(x: 1, y: -1)
+    CTFrameDraw(frame, context)
+    context.restoreGState()
+}
+
+let vertical = render("vertical", size: CGSize(width: 140, height: 260)) { context in
+    verticalText(["本契約の内容は、両当事者の", "書面による合意なしに変更", "できないものとする。", "納期は十月十五日です。"],
+                 in: CGRect(x: 10, y: 10, width: 120, height: 240), context: context)
+}
+save(vertical, "vertical.png")
 
 // Small UI text at 1× scale.
 let small = render("small", size: CGSize(width: 300, height: 40), scale: 1) { _ in

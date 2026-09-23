@@ -85,7 +85,7 @@ This Mac is not enrolled in device management (MDM). If your work Mac is a diffe
 - **Borderless tables where every cell is Japanese** and rows are spaced like body text can still merge rows into one Block, because nothing in the image separates them. Gridlines, a Passthrough cell or wider row spacing all keep rows apart.
 - **Translation time:** macOS translates one text at a time, about 0.25–0.35 s each, and batching or parallel sessions don't help. Loading the model adds about 1.5 s to the first call, so it's warmed up while you drag. A 20-cell spreadsheet takes several seconds, so results are streamed and each Block fills in as it's ready.
 - **OCR time:** two readings run in parallel. A paragraph takes about 0.2–0.3 s; a full dense page takes about 2 s.
-- **Vertical Japanese text:** out of scope for version 1, since it's rare in business documents.
+- **Vertical Japanese text:** Vision on macOS 26 reads vertical columns natively. `BlockGrouper` merges a column into the one to its left, reads right to left, and keeps columns apart across a vertical rule. A narrow column's English is turned sideways when that fits larger text. Only tested on rendered text so far; real scans of vertical documents are untested.
 - **Multiple monitors or mixed scaling:** the selection is limited to the screen where the drag starts. `CoordinateMapper` tests cover mixed scaling between screens.
 - **Stale permission after a rebuild:** document `tccutil reset ScreenCapture <bundle-id>` in the README.
 
@@ -96,7 +96,9 @@ This Mac is not enrolled in device management (MDM). If your work Mac is a diffe
 4. **Translate:** Translator with the language-pack check and download in onboarding; the `Shot` model; the details panel (D on the preview) shows Japanese ↔ English as translations stream in, with Copy English and Copy Japanese + English.
 5. **Shot windows:** in-place window, background sampling, patches extending into empty space, fitted and truncated text, hover popover (full text and Low-confidence note), orange dotted underline for Low-confidence Blocks, Space toggle and peek, drag, Esc/✕, D for details. Short labels lose a leading article (備考 → "Note", not "a note").
 6. **Shot management and polish:** ShotStore, Open Shots menu section (thumbnail and the start of the translation), Close All, save to disk with ⌘S or the hover save button (`ShotExporter`; existing files are never replaced, a number is added instead), Settings (hotkey, launch at login), onboarding (permission, language pack, launch at login on by default), the "No Japanese text found" notice, and reading order that treats slightly misaligned table cells as one row.
-7. **Later (optional):** vertical text, and an opt-in cloud translation mode, only once management approves it (ADR 0001).
+7. **Later (optional):**
+   - **Vertical text: done.** Columns group and read right to left, and a narrow column's English can be turned sideways.
+   - **Cloud translation mode: not started.** It's blocked until management approves a specific service (ADR 0001).
 
 ## Verification
 - **Unit tests** (`xcodebuild test`):

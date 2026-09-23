@@ -7,6 +7,8 @@ enum FitText {
     static let maximumSize: CGFloat = 28
     /// Horizontal padding inside a patch, per side, in points.
     static let padding: CGFloat = 2
+    /// The share of a patch's height that measured text may fill.
+    static let heightMargin: CGFloat = 0.92
 
     struct Fit: Equatable {
         var fontSize: CGFloat
@@ -47,7 +49,9 @@ enum FitText {
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             attributes: [.font: font(ofSize: fontSize)]
         )
-        return ceil(bounds.height) <= height && ceil(bounds.width) <= width
+        // SwiftUI lays out lines slightly taller than AppKit measures them, so keep a margin
+        // or the last line gets truncated.
+        return ceil(bounds.height) <= height * heightMargin && ceil(bounds.width) <= width
     }
 
     private static func lineHeightOf(fontSize: CGFloat) -> CGFloat {

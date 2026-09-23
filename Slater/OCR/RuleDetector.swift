@@ -1,7 +1,7 @@
 import CoreGraphics
 
-/// Finds horizontal rules, such as spreadsheet gridlines and table borders, in the gap between
-/// two Lines. Lines separated by a rule are different cells, however close together they are.
+/// Finds rules, such as spreadsheet gridlines and table borders, in the gap between two Lines.
+/// Lines separated by a rule are different cells, however close together they are.
 struct RuleDetector {
     /// How much darker than the gap's background a pixel row must be to count as a rule, out of 255.
     static let minimumDarkening = 12.0
@@ -29,6 +29,12 @@ struct RuleDetector {
         self.pixels = pixels
     }
 
+    /// A rule running along the gap's longer side: horizontal between stacked Lines,
+    /// vertical between columns of vertical writing.
+    func hasRule(in gap: CGRect) -> Bool {
+        gap.width >= gap.height ? hasHorizontalRule(in: gap) : hasVerticalRule(in: gap)
+    }
+
     /// `gap` is in the crop's pixels, origin top-left.
     func hasHorizontalRule(in gap: CGRect) -> Bool {
         let area = gap.integral.intersection(CGRect(x: 0, y: 0, width: width, height: height))
@@ -44,6 +50,23 @@ struct RuleDetector {
         return rows.contains { row in
             let dark = columns.count { Double(pixels[row * width + $0]) <= background - Self.minimumDarkening }
             return Double(dark) >= Self.minimumCoverage * Double(columns.count)
+        }
+    }
+
+    /// `gap` is in the crop's pixels, origin top-left.
+    func hasVerticalRule(in gap: CGRect) -> Bool {
+        let area = gap.integral.intersection(CGRect(x: 0, y: 0, width: width, height: height))
+        guard area.width >= 1, area.height >= 1 else { return false }
+        let columns = Int(area.minX)..<Int(area.maxX)
+        let rows = Int(area.minY)..<Int(area.maxY)
+
+        let columnMeans = columns.map { column in
+            Double(rows.reduce(0) { $0 + Int(pixels[$1 * width + column]) }) / Double(rows.count)
+        }
+        guard let background = columnMeans.max() else { return false }
+        return columns.contains { column in
+            let dark = rows.count { Double(pixels[$0 * width + column]) <= background - Self.minimumDarkening }
+            return Double(dark) >= Self.minimumCoverage * Double(rows.count)
         }
     }
 }

@@ -1,6 +1,7 @@
 import CoreGraphics
 
-/// One or more Lines stacked vertically that read as one unit and are translated together.
+/// One or more Lines that continue one another and are translated together: stacked for
+/// horizontal writing, side by side from right to left for vertical writing.
 struct Block: Equatable, Sendable {
     enum Kind: Equatable, Sendable {
         /// Contains Japanese, so it's translated.
@@ -10,6 +11,8 @@ struct Block: Equatable, Sendable {
     }
 
     var lines: [Line]
+
+    var isVertical: Bool { lines[0].isVertical }
 
     var kind: Kind { Self.containsJapanese(text) ? .japanese : .passthrough }
 

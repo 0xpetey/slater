@@ -85,6 +85,42 @@ struct BlockGrouperTests {
     }
 }
 
+private func column(_ text: String, x: CGFloat, y: CGFloat = 20, height: CGFloat = 400) -> Line {
+    Line(text: text, bounds: CGRect(x: x, y: y, width: 36, height: height))
+}
+
+struct VerticalWritingTests {
+    @Test func tallMultiCharacterLinesAreVertical() {
+        #expect(column("本契約の内容は", x: 0).isVertical)
+        #expect(!Line(text: "第", bounds: CGRect(x: 0, y: 0, width: 30, height: 60)).isVertical)
+        #expect(!Line(text: "品番", bounds: CGRect(x: 0, y: 0, width: 60, height: 30)).isVertical)
+    }
+
+    @Test func sentenceWrapsIntoTheColumnToTheLeftAndReadsRightToLeft() {
+        let blocks = BlockGrouper.group([
+            column("できないものとする。", x: 115, height: 300),
+            column("本契約の内容は、両当事者の", x: 216),
+            column("納期は十月十五日です。", x: 72, height: 340),
+            column("書面による合意なしに変更", x: 168, height: 380),
+        ])
+        #expect(blocks.map(\.text) == ["本契約の内容は、両当事者の書面による合意なしに変更できないものとする。", "納期は十月十五日です。"])
+        #expect(blocks.allSatisfy { $0.isVertical })
+    }
+
+    @Test func ruleBetweenColumnsKeepsThemApart() {
+        let blocks = BlockGrouper.group([column("担当者の", x: 100), column("確認", x: 50)], hasRule: { _ in true })
+        #expect(blocks.count == 2)
+    }
+
+    @Test func verticalAndHorizontalLinesNeverMerge() {
+        let blocks = BlockGrouper.group([
+            column("本契約の内容は", x: 100, y: 40),
+            Line(text: "見出しの文章", bounds: CGRect(x: 60, y: 0, width: 120, height: 30)),
+        ])
+        #expect(blocks.count == 2)
+    }
+}
+
 struct BlockKindTests {
     @Test(arguments: ["品番", "部品A", "AB-1024の在庫", "カタカナ", "ひらがな", "日々"])
     func japaneseTextIsTranslated(_ text: String) {

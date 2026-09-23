@@ -6,9 +6,12 @@ struct Patch: Identifiable, Equatable {
     let index: Int
     /// In the Shot window's points, origin top-left.
     let frame: CGRect
-    /// The height of one of the Block's original Lines, in points.
+    /// The size of the Block's original characters, in points: a Line's height, or a
+    /// column's width for vertical writing.
     let lineHeight: CGFloat
     let background: ColorSampler.RGB
+    /// Vertical writing: the translation may be turned sideways to fit a narrow column.
+    let isVertical: Bool
 
     var id: Int { index }
 }
@@ -46,7 +49,8 @@ enum ShotLayout {
             let color = background(bounds)
             // English is usually about twice as wide as the Japanese, so use any empty space to
             // the right. It stops at the next text or gridline, so no neighbor is covered.
-            let extra = CGFloat(clearWidth(bounds, color))
+            // Vertical columns are already long, and the space beside them is the next column.
+            let extra = block.isVertical ? 0 : CGFloat(clearWidth(bounds, color))
             var frame = CGRect(
                 x: bounds.minX * pointsPerPixel, y: bounds.minY * pointsPerPixel,
                 width: (bounds.width + extra) * pointsPerPixel, height: bounds.height * pointsPerPixel
@@ -60,8 +64,9 @@ enum ShotLayout {
             return Patch(
                 index: index,
                 frame: frame.intersection(window),
-                lineHeight: (block.lines.first?.bounds.height ?? bounds.height) * pointsPerPixel,
-                background: color
+                lineHeight: (block.isVertical ? block.lines[0].bounds.width : block.lines[0].bounds.height) * pointsPerPixel,
+                background: color,
+                isVertical: block.isVertical
             )
         }
     }

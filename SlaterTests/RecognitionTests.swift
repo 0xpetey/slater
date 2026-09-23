@@ -14,7 +14,7 @@ private func fixture(_ name: String) throws -> CGImage {
 private func blocks(_ name: String, pixelsPerPoint: CGFloat = 2) async throws -> [Block] {
     let image = try fixture(name)
     let lines = try await TextReader.read(image, pixelsPerPoint: pixelsPerPoint)
-    return BlockGrouper.group(lines, hasRule: RuleDetector(image: image).hasHorizontalRule)
+    return BlockGrouper.group(lines, hasRule: RuleDetector(image: image).hasRule)
 }
 
 /// End-to-end OCR on images rendered by scripts/make-fixtures.swift.
@@ -44,6 +44,12 @@ struct RecognitionTests {
     @Test func borderedRowsOfJapaneseStayApart() async throws {
         let texts = Set(try await blocks("roster").map(\.text))
         #expect(texts == ["担当者", "田中", "佐藤", "部署", "営業部", "開発部"])
+    }
+
+    @Test func verticalWritingReadsColumnsRightToLeft() async throws {
+        let result = try await blocks("vertical")
+        #expect(result.map(\.text) == ["本契約の内容は、両当事者の書面による合意なしに変更できないものとする。", "納期は十月十五日です。"])
+        #expect(result.allSatisfy { $0.isVertical })
     }
 
     @Test func smallTextAtOneTimesScaleKeepsEveryCharacter() async throws {

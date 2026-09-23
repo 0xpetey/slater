@@ -66,7 +66,7 @@ final class AppState {
         let pixelsPerPoint = CGFloat(capture.image.width) / capture.screen.frame.width
         let lines = try await TextReader.read(crop, pixelsPerPoint: pixelsPerPoint)
         let rules = RuleDetector(image: crop)
-        let blocks = BlockGrouper.group(lines, hasRule: rules.hasHorizontalRule)
+        let blocks = BlockGrouper.group(lines, hasRule: rules.hasRule)
         // Never log recognized text: the unified log is written to disk (ADR 0001).
         logger.info("Recognized \(lines.count) lines in \(blocks.count) blocks in \(String(describing: ContinuousClock.now - started), privacy: .public)")
         #if DEBUG

@@ -13,11 +13,11 @@ The act of grabbing the screen's pixels at the moment the hotkey is pressed. A C
 _Avoid_: Screenshot (as a noun for a Shot)
 
 **Line**:
-A single horizontal run of text as it appears on screen, before any merging.
+A single run of text as it appears on screen, before any merging: a row of horizontal writing or a column of vertical writing (縦書き).
 _Avoid_: Observation, row
 
 **Block**:
-One or more Lines stacked vertically that read as one unit, such as a paragraph or a wrapped cell, and are translated together. A Block never contains text that sits side by side, so separate table cells, form labels and columns are always separate Blocks.
+One or more Lines that continue one another and read as one unit, such as a paragraph or a wrapped cell, and are translated together. In horizontal writing the Lines are stacked; in vertical writing they are columns running right to left. A Block never joins text across the direction of writing, so separate table cells, form labels and page columns are always separate Blocks.
 _Avoid_: Paragraph, chunk, region
 
 **Japanese Block**:
