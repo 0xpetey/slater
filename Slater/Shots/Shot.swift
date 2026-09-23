@@ -33,6 +33,8 @@ final class Shot {
     /// Texts sent to the translator that haven't come back yet.
     var pendingTexts: Set<String> = []
     var state = State.translating
+    /// The model the translations came from (ADR 0003).
+    var model = Translator.Model.fast
     /// The corrected OCR reading has been applied (or wasn't needed), so the text is final.
     var isVerified = false
     private let sampler: ColorSampler

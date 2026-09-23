@@ -1,12 +1,15 @@
 import SwiftUI
+@preconcurrency import Translation
 
 /// The Shot's frozen image with an English patch over each Japanese Block.
 struct ShotView: View {
     let shot: Shot
     let state: ShotViewState
+    let translator: Translator
     /// Rendering for a saved image: translations only, no controls.
     var isExporting = false
     var onSave: () -> Void = {}
+    var onRerunWithAccurate: () -> Void = {}
     let onClose: () -> Void
     @State private var isHovering = false
 
@@ -43,6 +46,16 @@ struct ShotView: View {
             }
         }
         .onHover { isHovering = $0 }
+        // Asks macOS to download the Accurate model, showing its own confirmation dialog, then
+        // reruns the Shot with it.
+        .translationTask(state.accurateDownload) { session in
+            try? await session.prepareTranslation()
+            state.accurateDownload = nil
+            await translator.refreshModels()
+            if translator.status(of: .accurate) == .installed {
+                await translator.translate(shot, using: .accurate, replacingExisting: true)
+            }
+        }
     }
 
     private var controls: some View {
@@ -56,6 +69,18 @@ struct ShotView: View {
                     .help("Translation failed")
             }
             if isHovering {
+                if shot.model == .fast && translator.status(of: .accurate) != .unsupported {
+                    Button(action: onRerunWithAccurate) {
+                        Text("Accurate")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .frame(height: 16)
+                            .background(.black.opacity(0.6), in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Translate again with the Accurate model (A)")
+                }
                 Button(action: onSave) {
                     Image(systemName: "square.and.arrow.down.fill")
                         .foregroundStyle(.white)

@@ -6,7 +6,7 @@ import SwiftUI
 final class DetailsPanelController {
     private let panel: NSPanel
 
-    init(shot: Shot) {
+    init(shot: Shot, onRerunWithAccurate: @escaping () -> Void) {
         panel = NSPanel(
             contentRect: CGRect(x: 0, y: 0, width: 460, height: 360),
             styleMask: [.titled, .closable, .resizable, .utilityWindow],
@@ -16,7 +16,7 @@ final class DetailsPanelController {
         panel.title = "Shot Details"
         panel.isReleasedWhenClosed = false
         panel.level = .floating
-        panel.contentViewController = NSHostingController(rootView: DetailsView(shot: shot))
+        panel.contentViewController = NSHostingController(rootView: DetailsView(shot: shot, onRerunWithAccurate: onRerunWithAccurate))
         // Open beside the Shot rather than over it, so the two can be compared.
         panel.setFrameTopLeftPoint(CGPoint(x: shot.screenRect.maxX + 12, y: shot.screenRect.maxY))
     }
@@ -32,6 +32,7 @@ final class DetailsPanelController {
 
 private struct DetailsView: View {
     let shot: Shot
+    let onRerunWithAccurate: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,6 +43,12 @@ private struct DetailsView: View {
                 } else if shot.state == .failed {
                     Label("Translation failed", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
+                } else {
+                    Text("\(shot.model.title) model").foregroundStyle(.secondary)
+                }
+                if shot.model == .fast {
+                    Button("Rerun with Accurate", action: onRerunWithAccurate)
+                        .disabled(shot.state == .translating)
                 }
                 Spacer()
                 Button("Copy English") { copy(shot.englishText) }

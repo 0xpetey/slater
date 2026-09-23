@@ -31,7 +31,8 @@ struct OnboardingView: View {
     let permissions: PermissionsManager
     let translator: Translator
     let onDone: () -> Void
-    @State private var download: TranslationSession.Configuration?
+    @State private var fastDownload: TranslationSession.Configuration?
+    @State private var accurateDownload: TranslationSession.Configuration?
     @State private var launchAtLogin = true
 
     var body: some View {
@@ -64,23 +65,22 @@ struct OnboardingView: View {
                 .padding(4)
             }
 
+            // The Fast model is what Slater translates with (ADR 0003), so it's required.
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    switch translator.languagePack {
+                    switch translator.fastModel {
                     case .checking:
-                        Label("Checking the Japanese language pack…", systemImage: "hourglass")
+                        Label("Checking the translation model…", systemImage: "hourglass")
                     case .installed:
-                        Label("Japanese language pack installed", systemImage: "checkmark.circle.fill")
+                        Label("Translation model installed", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                     case .needsDownload:
-                        Label("Japanese language pack needed", systemImage: "exclamationmark.circle.fill")
+                        Label("Translation model needed", systemImage: "exclamationmark.circle.fill")
                             .foregroundStyle(.orange)
-                        Text("Translation runs on this Mac, so macOS needs to download the Japanese ↔ English language pack once.")
+                        Text("Translation runs on this Mac, so macOS needs to download its Japanese ↔ English model once.")
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        Button("Download…") {
-                            download = TranslationSession.Configuration(source: Translator.source, target: Translator.target)
-                        }
+                        Button("Download…") { fastDownload = Translator.Model.fast.downloadConfiguration }
                     case .unsupported:
                         Label("Japanese to English isn't available on this Mac", systemImage: "xmark.circle.fill")
                             .foregroundStyle(.red)
@@ -89,10 +89,39 @@ struct OnboardingView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(4)
             }
-            // Asks macOS to download the pack, showing its own confirmation dialog.
-            .translationTask(download) { session in
+            // Asks macOS to download the model, showing its own confirmation dialog.
+            .translationTask(fastDownload) { session in
                 try? await session.prepareTranslation()
-                await translator.refreshLanguagePack()
+                await translator.refreshModels()
+                translator.warmUp()
+            }
+
+            // The Accurate model is optional: slower, sometimes better wording.
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    switch translator.accurateModel {
+                    case .checking:
+                        Label("Checking the Accurate model…", systemImage: "hourglass")
+                    case .installed:
+                        Label("Accurate model installed (optional)", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    case .needsDownload:
+                        Label("Accurate model (optional)", systemImage: "arrow.down.circle")
+                        Text("A larger model that's slower but sometimes words things better. You can translate any Shot again with it, or make it the default in Settings.")
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Also download…") { accurateDownload = Translator.Model.accurate.downloadConfiguration }
+                    case .unsupported:
+                        Label("The Accurate model isn't available on this Mac", systemImage: "minus.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(4)
+            }
+            .translationTask(accurateDownload) { session in
+                try? await session.prepareTranslation()
+                await translator.refreshModels()
             }
 
             if let shortcut = KeyboardShortcuts.getShortcut(for: .takeShot) {
@@ -109,12 +138,12 @@ struct OnboardingView: View {
                     }
                     onDone()
                 }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!permissions.hasScreenRecording || translator.languagePack != .installed)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!permissions.hasScreenRecording || translator.fastModel != .installed)
             }
         }
         .padding(20)
-        .frame(width: 420)
+        .frame(width: 440)
         .task {
             // Picks up the grant if macOS reports it without a restart.
             while !Task.isCancelled && !permissions.hasScreenRecording {

@@ -13,17 +13,23 @@ private func milliseconds(since start: ContinuousClock.Instant) -> Int {
 @Observable
 final class AppState {
     let permissions = PermissionsManager()
-    let translator = Translator()
-    let shots = ShotStore()
+    let translator: Translator
+    let shots: ShotStore
     @ObservationIgnored private var hotkeys: HotkeyManager?
     @ObservationIgnored private var onboarding: OnboardingWindowController?
     @ObservationIgnored private let selectionOverlay = SelectionOverlayController()
     @ObservationIgnored private var isTakingShot = false
 
+    init() {
+        let translator = Translator()
+        self.translator = translator
+        shots = ShotStore(translator: translator)
+    }
+
     func start() {
         hotkeys = HotkeyManager { [weak self] in self?.takeShot() }
         Task {
-            await translator.refreshLanguagePack()
+            await translator.refreshModels()
             if !isReady {
                 showOnboarding()
             }
@@ -49,9 +55,9 @@ final class AppState {
         }
     }
 
-    /// Screen Recording is granted and the Japanese language pack is installed.
+    /// Screen Recording is granted and a translation model is installed.
     var isReady: Bool {
-        permissions.hasScreenRecording && translator.languagePack == .installed
+        permissions.hasScreenRecording && translator.hasInstalledModel
     }
 
     func takeShot() {

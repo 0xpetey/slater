@@ -5,9 +5,14 @@ import Observation
 @Observable
 final class ShotStore {
     private(set) var windows: [ShotWindowController] = []
+    private let translator: Translator
+
+    init(translator: Translator) {
+        self.translator = translator
+    }
 
     func open(_ shot: Shot) {
-        let window = ShotWindowController(shot: shot) { [weak self] closed in
+        let window = ShotWindowController(shot: shot, translator: translator) { [weak self] closed in
             self?.windows.removeAll { $0 === closed }
         }
         windows.append(window)

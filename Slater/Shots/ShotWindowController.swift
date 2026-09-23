@@ -1,6 +1,7 @@
 import AppKit
 import Observation
 import SwiftUI
+@preconcurrency import Translation
 
 /// A floating window for one Shot. It opens exactly over the text it came from and can be
 /// dragged anywhere to keep for reference.
@@ -9,6 +10,7 @@ final class ShotWindowController: Identifiable {
     let shot: Shot
     /// A small copy of the original image for the menu bar's Open Shots list.
     let thumbnail: NSImage
+    private let translator: Translator
     private let panel: KeyablePanel
     private let viewState = ShotViewState()
     private var details: DetailsPanelController?
@@ -18,8 +20,9 @@ final class ShotWindowController: Identifiable {
     /// A Space press held longer than this is a peek: the English comes back on release.
     private static let peekThreshold: TimeInterval = 0.35
 
-    init(shot: Shot, onClose: @escaping (ShotWindowController) -> Void) {
+    init(shot: Shot, translator: Translator, onClose: @escaping (ShotWindowController) -> Void) {
         self.shot = shot
+        self.translator = translator
         self.onClose = onClose
         let thumbnailHeight: CGFloat = 18
         let aspect = CGFloat(shot.image.width) / CGFloat(shot.image.height)
@@ -31,7 +34,9 @@ final class ShotWindowController: Identifiable {
         let container = ShotContainerView(rootView: ShotView(
             shot: shot,
             state: viewState,
+            translator: translator,
             onSave: { [weak self] in self?.save() },
+            onRerunWithAccurate: { [weak self] in self?.rerunWithAccurate() },
             onClose: { [weak self] in self?.close() }
         ))
         container.onKeyDown = { [weak self] event in self?.keyDown(event) ?? false }
@@ -51,6 +56,21 @@ final class ShotWindowController: Identifiable {
         onClose(self)
     }
 
+    /// Translates the Shot again with the Accurate model, replacing the Fast translations as
+    /// each new one lands. If Accurate isn't installed yet, asks macOS to download it first.
+    func rerunWithAccurate() {
+        guard shot.model == .fast else { return }
+        switch translator.status(of: .accurate) {
+        case .installed:
+            Task { await translator.translate(shot, using: .accurate, replacingExisting: true) }
+        case .needsDownload:
+            NSApp.activate()
+            viewState.accurateDownload = Translator.Model.accurate.downloadConfiguration
+        case .checking, .unsupported:
+            break
+        }
+    }
+
     private func keyDown(_ event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command) {
             guard event.charactersIgnoringModifiers == "s" else { return false }
@@ -66,8 +86,11 @@ final class ShotWindowController: Identifiable {
                 spaceDownAt = event.timestamp
             }
         default:
-            guard event.charactersIgnoringModifiers == "d" else { return false }
-            showDetails()
+            switch event.charactersIgnoringModifiers {
+            case "d": showDetails()
+            case "a": rerunWithAccurate()
+            default: return false
+            }
         }
         return true
     }
@@ -117,14 +140,14 @@ final class ShotWindowController: Identifiable {
 
     /// The Shot as it looks with translations, at the original image's resolution.
     private func renderTranslatedImage() -> CGImage? {
-        let renderer = ImageRenderer(content: ShotView(shot: shot, state: viewState, isExporting: true, onClose: {}))
+        let renderer = ImageRenderer(content: ShotView(shot: shot, state: viewState, translator: translator, isExporting: true, onClose: {}))
         renderer.scale = CGFloat(shot.image.width) / shot.screenRect.width
         return renderer.cgImage
     }
 
     private func showDetails() {
         if details == nil {
-            details = DetailsPanelController(shot: shot)
+            details = DetailsPanelController(shot: shot, onRerunWithAccurate: { [weak self] in self?.rerunWithAccurate() })
         }
         details?.show()
     }
@@ -134,6 +157,8 @@ final class ShotWindowController: Identifiable {
 @Observable
 final class ShotViewState {
     var showsOriginal = false
+    /// Set to ask macOS to download the Accurate model; the Shot view runs the download.
+    var accurateDownload: TranslationSession.Configuration?
 }
 
 @MainActor

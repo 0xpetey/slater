@@ -28,13 +28,13 @@ struct ShotTests {
     }
 }
 
-/// Uses the real on-device translator, so it needs the Japanese language pack installed.
+/// Uses the real on-device translator, so it needs a Japanese → English model installed.
 @MainActor
 struct TranslatorTests {
     @Test func translatesEachJapaneseBlockAndRepeatsOnlyOnce() async throws {
         let translator = Translator()
-        await translator.refreshLanguagePack()
-        try #require(translator.languagePack == .installed, "Install the Japanese language pack to run this test")
+        await translator.refreshModels()
+        try #require(translator.hasInstalledModel, "Install a Japanese → English translation model to run this test")
 
         let shot = makeShot(["品番", "AB-1024", "品番", "仕様変更のため、再見積もりが必要です。"])
         await translator.translate(shot)
@@ -46,6 +46,43 @@ struct TranslatorTests {
             #expect(!translation.isEmpty)
             #expect(!Block.containsJapanese(translation))
         }
+    }
+}
+
+@MainActor
+struct RerunWithAccurateTests {
+    @Test func rerunReplacesFastTranslationsAndRecordsTheModel() async throws {
+        let translator = Translator()
+        await translator.refreshModels()
+        try #require(translator.status(of: .fast) == .installed && translator.status(of: .accurate) == .installed,
+                     "Install both translation models to run this test")
+
+        let shot = makeShot(["仕様変更のため、再見積もりが必要です。", "AB-1024"])
+        await translator.translate(shot, using: .fast)
+        #expect(shot.model == .fast)
+        #expect(shot.state == .translated)
+        let fast = try #require(shot.translations[0])
+
+        await translator.translate(shot, using: .accurate, replacingExisting: true)
+        #expect(shot.model == .accurate)
+        #expect(shot.state == .translated)
+        #expect(shot.pendingTexts.isEmpty)
+        let accurate = try #require(shot.translations[0])
+        #expect(!accurate.isEmpty && !Block.containsJapanese(accurate))
+        _ = fast
+    }
+
+    @Test func withoutReplacingNothingIsSentAgain() async throws {
+        let translator = Translator()
+        await translator.refreshModels()
+        try #require(translator.hasInstalledModel, "Install a Japanese → English translation model to run this test")
+
+        let shot = makeShot(["品番"])
+        await translator.translate(shot)
+        let first = shot.translations[0]
+        await translator.translate(shot)
+        #expect(shot.translations[0] == first)
+        #expect(shot.state == .translated)
     }
 }
 

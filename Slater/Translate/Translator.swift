@@ -9,62 +9,74 @@ private let logger = Logger(subsystem: "com.peterjournell.slater", category: "tr
 @MainActor
 @Observable
 final class Translator {
-    static let source = Locale.Language(identifier: "ja")
+    nonisolated static let source = Locale.Language(identifier: "ja")
     /// English only for now; a setting can replace this constant later.
-    static let target = Locale.Language(identifier: "en")
+    nonisolated static let target = Locale.Language(identifier: "en")
 
-    enum LanguagePack: Equatable {
+    enum ModelStatus: Equatable {
         case checking, installed, needsDownload, unsupported
     }
 
-    /// Which of macOS's on-device models to use. Both stay on this Mac.
+    /// Which of macOS's on-device models to use. Both stay on this Mac (ADR 0003).
     enum Model: String, CaseIterable, Identifiable {
-        /// macOS's default model. Translates one text at a time, about 0.3–0.5 s each.
-        case accurate
-        /// A smaller model that macOS downloads on request. Returns results sooner.
+        /// A smaller model: about 20 ms per text. The default.
         case fast
+        /// macOS's default model: about 0.4 s per text, sometimes better wording.
+        case accurate
 
         var id: Self { self }
 
         var title: String {
             switch self {
-            case .accurate: "Accurate"
             case .fast: "Fast"
+            case .accurate: "Accurate"
             }
         }
 
         var strategy: TranslationSession.Strategy {
             self == .fast ? .lowLatency : .highFidelity
         }
+
+        /// For SwiftUI's `translationTask`, which shows macOS's download prompt.
+        var downloadConfiguration: TranslationSession.Configuration {
+            TranslationSession.Configuration(source: Translator.source, target: Translator.target, preferredStrategy: strategy)
+        }
     }
 
-    /// The Accurate model. Required, so onboarding downloads it.
-    private(set) var languagePack = LanguagePack.checking
-    /// The Fast model. Optional, downloaded from Settings.
-    private(set) var fastModel = LanguagePack.checking
+    private(set) var fastModel = ModelStatus.checking
+    private(set) var accurateModel = ModelStatus.checking
     /// The model the user chose. Only the choice is remembered, never any content.
-    private(set) var model = Model(rawValue: UserDefaults.standard.string(forKey: "translationModel") ?? "") ?? .accurate
-    @ObservationIgnored private var session: TranslationSession?
+    private(set) var model = Model(rawValue: UserDefaults.standard.string(forKey: "translationModel") ?? "") ?? .fast
+    @ObservationIgnored private var sessions: [Model: TranslationSession] = [:]
 
-    /// The model translations actually use: Fast only when chosen and installed.
+    func status(of model: Model) -> ModelStatus {
+        model == .fast ? fastModel : accurateModel
+    }
+
+    var hasInstalledModel: Bool {
+        fastModel == .installed || accurateModel == .installed
+    }
+
+    /// The chosen model when it's installed, otherwise whichever one is.
     var activeModel: Model {
-        model == .fast && fastModel == .installed ? .fast : .accurate
+        if status(of: model) == .installed { return model }
+        let other: Model = model == .fast ? .accurate : .fast
+        return status(of: other) == .installed ? other : model
     }
 
     func setModel(_ newModel: Model) {
         model = newModel
         UserDefaults.standard.set(newModel.rawValue, forKey: "translationModel")
-        session = nil
         warmUp()
     }
 
-    func refreshLanguagePack() async {
-        languagePack = await status(of: .accurate)
-        fastModel = await status(of: .fast)
-        session = nil
+    func refreshModels() async {
+        fastModel = await availability(of: .fast)
+        accurateModel = await availability(of: .accurate)
+        sessions = [:]
     }
 
-    private func status(of model: Model) async -> LanguagePack {
+    private func availability(of model: Model) async -> ModelStatus {
         switch await LanguageAvailability(preferredStrategy: model.strategy).status(from: Self.source, to: Self.target) {
         case .installed: .installed
         case .supported: .needsDownload
@@ -72,26 +84,35 @@ final class Translator {
         }
     }
 
-    /// Loading a model takes 1.5–8 s on the first translation, so Slater warms it up at
-    /// launch, on wake and when the hotkey is pressed, while the user is still dragging a box.
+    /// Loading a model takes 60 ms (Fast) to 8 s (Accurate, cold) on the first translation, so
+    /// Slater warms the active one up at launch, on wake and when the hotkey is pressed, while
+    /// the user is still dragging a box.
     func warmUp() {
-        guard languagePack == .installed else { return }
-        let session = currentSession()
+        let model = activeModel
+        guard status(of: model) == .installed else { return }
+        let session = session(for: model)
         Task { _ = try? await session.translate("準備") }
     }
 
-    /// Translates the Shot's Japanese Blocks that aren't translated yet, in reading order and
-    /// each distinct text once, filling in the Shot as results arrive. macOS translates one text
-    /// at a time, so streaming lets the top of the page appear first. Safe to call again after
-    /// the Shot's Blocks change: only new texts are sent.
-    func translate(_ shot: Shot) async {
+    /// Translates the Shot's Japanese Blocks, in reading order and each distinct text once,
+    /// filling in the Shot as results arrive. Normally only untranslated texts are sent, so it's
+    /// safe to call again after the corrected reading changes some Blocks. With
+    /// `replacingExisting`, every text is sent again, which is how a Shot translated with Fast
+    /// is rerun with Accurate: the old translations stay visible until each new one lands.
+    func translate(_ shot: Shot, using requested: Model? = nil, replacingExisting: Bool = false) async {
+        let model = requested ?? activeModel
+        guard status(of: model) == .installed else {
+            shot.state = .failed
+            logger.error("No \(model.title, privacy: .public) model installed")
+            return
+        }
         var texts: [String] = []
         for index in shot.japaneseBlockIndices {
             let text = shot.blocks[index].text
-            if shot.slots[text]?.text == nil, !shot.pendingTexts.contains(text), !texts.contains(text) {
-                texts.append(text)
-            }
+            let wanted = replacingExisting || (shot.slots[text]?.text == nil && !shot.pendingTexts.contains(text))
+            if wanted, !texts.contains(text) { texts.append(text) }
         }
+        shot.model = model
         guard !texts.isEmpty else {
             if shot.pendingTexts.isEmpty { shot.state = .translated }
             return
@@ -102,12 +123,11 @@ final class Translator {
         let requests = texts.enumerated().map { number, text in
             TranslationSession.Request(sourceText: text, clientIdentifier: String(number))
         }
-        let model = activeModel
         let started = ContinuousClock.now
         var firstResult: Duration?
 
         do {
-            for try await response in currentSession().translate(batch: requests) {
+            for try await response in session(for: model).translate(batch: requests) {
                 firstResult = firstResult ?? ContinuousClock.now - started
                 guard let identifier = response.clientIdentifier, let number = Int(identifier) else { continue }
                 let text = texts[number]
@@ -119,7 +139,7 @@ final class Translator {
             shot.pendingTexts.subtract(texts)
             shot.state = .failed
             logger.error("Translation failed: \(error.localizedDescription, privacy: .public)")
-            await refreshLanguagePack()
+            await refreshModels()
         }
         // Counts and timings only, never text (ADR 0001).
         let lengths = texts.map(\.count)
@@ -141,10 +161,10 @@ final class Translator {
         return translation.prefix(1).uppercased() + translation.dropFirst()
     }
 
-    private func currentSession() -> TranslationSession {
-        if let session { return session }
-        let session = TranslationSession(installedSource: Self.source, target: Self.target, preferredStrategy: activeModel.strategy)
-        self.session = session
+    private func session(for model: Model) -> TranslationSession {
+        if let session = sessions[model] { return session }
+        let session = TranslationSession(installedSource: Self.source, target: Self.target, preferredStrategy: model.strategy)
+        sessions[model] = session
         return session
     }
 }
