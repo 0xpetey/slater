@@ -28,3 +28,7 @@ Slater needs Screen Recording permission to read the screen. macOS ties this per
 ```sh
 tccutil reset ScreenCapture com.peterjournell.slater
 ```
+
+## License
+
+MIT. See `LICENSE`.
