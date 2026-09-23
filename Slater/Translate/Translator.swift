@@ -1,5 +1,8 @@
 import Observation
+import os
 @preconcurrency import Translation
+
+private let logger = Logger(subsystem: "com.peterjournell.slater", category: "translation")
 
 /// Japanese → English, on-device only (ADR 0001).
 @MainActor
@@ -25,8 +28,8 @@ final class Translator {
         if languagePack != .installed { session = nil }
     }
 
-    /// Loading the model takes about 1.5 s on the first translation, so start it while
-    /// the user is still dragging a box.
+    /// Loading the model takes 1.5–8 s on the first translation, so Slater warms it up at
+    /// launch, on wake and when the hotkey is pressed, while the user is still dragging a box.
     func warmUp() {
         guard languagePack == .installed else { return }
         let session = currentSession()
@@ -41,9 +44,12 @@ final class Translator {
             TranslationSession.Request(sourceText: text, clientIdentifier: String(number))
         }
         let textsByIdentifier = Dictionary(uniqueKeysWithValues: requests.map { ($0.clientIdentifier!, $0.sourceText) })
+        let started = ContinuousClock.now
+        var firstResult: Duration?
 
         do {
             for try await response in currentSession().translate(batch: requests) {
+                firstResult = firstResult ?? ContinuousClock.now - started
                 guard let identifier = response.clientIdentifier, let text = textsByIdentifier[identifier] else { continue }
                 for index in indicesByText[text] ?? [] {
                     shot.translations[index] = Self.tidy(response.targetText, source: text)
@@ -52,8 +58,16 @@ final class Translator {
             shot.state = .translated
         } catch {
             shot.state = .failed
+            logger.error("Translation failed: \(error.localizedDescription, privacy: .public)")
             await refreshLanguagePack()
         }
+        // Counts and timings only, never text (ADR 0001).
+        let lengths = requests.map(\.sourceText.count)
+        logger.notice("""
+            Translated \(requests.count) texts (\(lengths.reduce(0, +)) characters, longest \(lengths.max() ?? 0)): \
+            first result after \(firstResult.map { "\($0.components.seconds * 1000 + $0.components.attoseconds / 1_000_000_000_000_000)" } ?? "–", privacy: .public) ms, \
+            all after \((ContinuousClock.now - started).components.seconds * 1000 + (ContinuousClock.now - started).components.attoseconds / 1_000_000_000_000_000) ms
+            """)
     }
 
     /// Short labels such as 備考 or 単価 come back as "a note" or "a unit price". An article
