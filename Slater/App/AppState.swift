@@ -8,6 +8,7 @@ private let logger = Logger(subsystem: "com.peterjournell.slater", category: "sh
 @Observable
 final class AppState {
     let permissions = PermissionsManager()
+    let translator = Translator()
     @ObservationIgnored private var hotkeys: HotkeyManager?
     @ObservationIgnored private var onboarding: OnboardingWindowController?
     @ObservationIgnored private let selectionOverlay = SelectionOverlayController()
@@ -16,19 +17,28 @@ final class AppState {
 
     func start() {
         hotkeys = HotkeyManager { [weak self] in self?.takeShot() }
-        if !permissions.hasScreenRecording {
-            showOnboarding()
+        Task {
+            await translator.refreshLanguagePack()
+            if !isReady {
+                showOnboarding()
+            }
         }
+    }
+
+    /// Screen Recording is granted and the Japanese language pack is installed.
+    var isReady: Bool {
+        permissions.hasScreenRecording && translator.languagePack == .installed
     }
 
     func takeShot() {
         guard !isTakingShot else { return }
         permissions.refresh()
-        guard permissions.hasScreenRecording else {
+        guard isReady else {
             showOnboarding()
             return
         }
         isTakingShot = true
+        translator.warmUp()
         Task {
             defer { isTakingShot = false }
             do {
@@ -65,17 +75,28 @@ final class AppState {
         }
         #endif
 
-        // Milestone 4 onwards: translate and open a Shot. For now, show the crop in place with its Blocks outlined.
-        let preview = CapturePreviewController(image: crop, blocks: blocks, globalRect: globalRect) { [weak self] closed in
+        let shot = Shot(image: crop, screenRect: globalRect, blocks: blocks)
+        guard !shot.japaneseBlockIndices.isEmpty else {
+            // Milestone 6: a "No Japanese text found" notice near the cursor.
+            NSSound.beep()
+            return
+        }
+
+        // Milestone 5: open a Shot window. For now, show the temporary preview; D opens the details.
+        let preview = CapturePreviewController(shot: shot) { [weak self] closed in
             self?.previews.removeAll { $0 === closed }
         }
         previews.append(preview)
         preview.show()
+        Task {
+            await translator.translate(shot)
+            logger.info("Translated \(shot.translations.count) blocks in \(String(describing: ContinuousClock.now - started), privacy: .public)")
+        }
     }
 
     func showOnboarding() {
         if onboarding == nil {
-            onboarding = OnboardingWindowController(permissions: permissions)
+            onboarding = OnboardingWindowController(permissions: permissions, translator: translator)
         }
         onboarding?.show()
     }

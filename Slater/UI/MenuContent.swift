@@ -5,8 +5,8 @@ struct MenuContent: View {
 
     var body: some View {
         Button("Take Shot") { appState.takeShot() }
-        if !appState.permissions.hasScreenRecording {
-            Button("Grant Screen Recording…") { appState.showOnboarding() }
+        if !appState.isReady {
+            Button("Finish Setup…") { appState.showOnboarding() }
         }
         Divider()
         SettingsLink { Text("Settings…") }

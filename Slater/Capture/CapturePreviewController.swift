@@ -1,34 +1,49 @@
 import AppKit
 
-/// Temporary, for milestones 2–4: shows a cropped Capture exactly where it came from, with its
-/// Blocks outlined, so the crop and grouping can be checked. Replaced by Shot windows in milestone 5.
+/// Temporary, for milestones 2–4: shows a Shot's image exactly where it came from, with its
+/// Blocks outlined, so the crop and grouping can be checked. D opens the details panel.
+/// Replaced by Shot windows in milestone 5.
 /// Kept in memory only (ADR 0001).
 @MainActor
 final class CapturePreviewController {
     private let panel: KeyablePanel
+    private let shot: Shot
+    private var details: DetailsPanelController?
 
-    init(image: CGImage, blocks: [Block], globalRect: CGRect, onClose: @escaping (CapturePreviewController) -> Void) {
+    init(shot: Shot, onClose: @escaping (CapturePreviewController) -> Void) {
+        self.shot = shot
+        let globalRect = shot.screenRect
         panel = KeyablePanel(contentRect: globalRect)
         panel.level = .floating
         panel.hasShadow = true
         panel.isMovableByWindowBackground = true
-        let view = PreviewView(image: image, blocks: blocks, pointsPerPixel: globalRect.width / CGFloat(image.width))
+        let view = PreviewView(image: shot.image, blocks: shot.blocks, pointsPerPixel: globalRect.width / CGFloat(shot.image.width))
         panel.contentView = view
         panel.setFrame(globalRect, display: false)
         view.onEscape = { [weak self] in
             guard let self else { return }
+            details?.close()
             panel.orderOut(nil)
             onClose(self)
         }
+        view.onDetails = { [weak self] in self?.showDetails() }
     }
 
     func show() {
         panel.makeKeyAndOrderFront(nil)
     }
+
+    private func showDetails() {
+        if details == nil {
+            details = DetailsPanelController(shot: shot)
+        }
+        details?.show()
+    }
 }
 
 private final class PreviewView: NSView {
     var onEscape: () -> Void = {}
+    var onDetails: () -> Void = {}
 
     init(image: CGImage, blocks: [Block], pointsPerPixel: CGFloat) {
         super.init(frame: .zero)
@@ -74,6 +89,8 @@ private final class PreviewView: NSView {
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { // Esc
             onEscape()
+        } else if event.charactersIgnoringModifiers == "d" {
+            onDetails()
         } else {
             super.keyDown(with: event)
         }

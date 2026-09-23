@@ -1,11 +1,12 @@
 @preconcurrency import KeyboardShortcuts
 import SwiftUI
+@preconcurrency import Translation
 
 @MainActor
 final class OnboardingWindowController {
     private let window: NSWindow
 
-    init(permissions: PermissionsManager) {
+    init(permissions: PermissionsManager, translator: Translator) {
         window = NSWindow(
             contentRect: .zero,
             styleMask: [.titled, .closable],
@@ -15,7 +16,7 @@ final class OnboardingWindowController {
         window.title = "Welcome to Slater"
         window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(
-            rootView: OnboardingView(permissions: permissions) { [weak window] in window?.close() }
+            rootView: OnboardingView(permissions: permissions, translator: translator) { [weak window] in window?.close() }
         )
     }
 
@@ -28,7 +29,9 @@ final class OnboardingWindowController {
 
 struct OnboardingView: View {
     let permissions: PermissionsManager
+    let translator: Translator
     let onDone: () -> Void
+    @State private var download: TranslationSession.Configuration?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -60,6 +63,37 @@ struct OnboardingView: View {
                 .padding(4)
             }
 
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    switch translator.languagePack {
+                    case .checking:
+                        Label("Checking the Japanese language pack…", systemImage: "hourglass")
+                    case .installed:
+                        Label("Japanese language pack installed", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    case .needsDownload:
+                        Label("Japanese language pack needed", systemImage: "exclamationmark.circle.fill")
+                            .foregroundStyle(.orange)
+                        Text("Translation runs on this Mac, so macOS needs to download the Japanese ↔ English language pack once.")
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Download…") {
+                            download = TranslationSession.Configuration(source: Translator.source, target: Translator.target)
+                        }
+                    case .unsupported:
+                        Label("Japanese to English isn't available on this Mac", systemImage: "xmark.circle.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(4)
+            }
+            // Asks macOS to download the pack, showing its own confirmation dialog.
+            .translationTask(download) { session in
+                try? await session.prepareTranslation()
+                await translator.refreshLanguagePack()
+            }
+
             if let shortcut = KeyboardShortcuts.getShortcut(for: .takeShot) {
                 Text("Press **\(shortcut.description)** to take a Shot. You can change this in Settings.")
             }
@@ -68,7 +102,7 @@ struct OnboardingView: View {
                 Spacer()
                 Button("Done", action: onDone)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!permissions.hasScreenRecording)
+                    .disabled(!permissions.hasScreenRecording || translator.languagePack != .installed)
             }
         }
         .padding(20)
