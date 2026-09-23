@@ -26,6 +26,8 @@ targets:
     sources: [Slater]
     dependencies:
       - package: KeyboardShortcuts
+    scheme:
+      testTargets: [SlaterTests]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peterjournell.slater
@@ -35,3 +37,13 @@ targets:
         CFBundleDisplayName: Slater
         LSUIElement: true
         LSApplicationCategoryType: public.app-category.productivity
+  SlaterTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [SlaterTests]
+    dependencies:
+      - target: Slater
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.peterjournell.slater.tests

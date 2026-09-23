@@ -86,7 +86,7 @@ This Mac is not enrolled in device management (MDM). If your work Mac is a diffe
 
 ## Milestones
 1. **Skeleton:** menu bar app, hotkey, Screen Recording permission flow.
-2. **Capture and select:** frozen-screen selection; saves the cropped PNG so you can check it's correct.
+2. **Capture and select:** frozen-screen selection. The crop is shown in a temporary preview window placed exactly where it came from, so you can check it lines up with the screen underneath. It's kept in memory only, per ADR 0001, and replaced by Shot windows in milestone 5.
 3. **OCR:** preprocessing, Vision recognition and `BlockGrouper`; print the Blocks with their confidence scores to the console. Test with spreadsheets and bad scans, and tune the low-confidence threshold (a Block's confidence is its lowest Line confidence) against real bad scans.
 4. **Translate:** Translator with the language-pack check; the details panel shows Japanese ↔ English.
 5. **Shot windows:** in-place window, background sampling, fitted and truncated text, hover, Space toggle, drag, Esc/✕.

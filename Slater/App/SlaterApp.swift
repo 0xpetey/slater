@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Unit tests use the app as their host; don't register hotkeys or show onboarding.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         appState.start()
     }
 }
