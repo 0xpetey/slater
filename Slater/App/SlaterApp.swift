@@ -5,7 +5,7 @@ struct SlaterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("Slater", systemImage: "translate") {
+        MenuBarExtra("Slater", systemImage: "lizard") {
             MenuContent(appState: appDelegate.appState)
         }
         Settings {
