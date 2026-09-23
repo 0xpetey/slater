@@ -26,7 +26,22 @@ enum BlockGrouper {
                 blocks.append(Block(lines: [line]))
             }
         }
-        return blocks.sorted { ($0.bounds.minY, $0.bounds.minX) < ($1.bounds.minY, $1.bounds.minX) }
+        return readingOrder(blocks)
+    }
+
+    /// Top to bottom, then left to right within a row. Blocks whose tops are within half a
+    /// line of each other share a row, since table cells in one row rarely align exactly.
+    static func readingOrder(_ blocks: [Block]) -> [Block] {
+        var rows: [[Block]] = []
+        for block in blocks.sorted(by: { $0.bounds.minY < $1.bounds.minY }) {
+            if let first = rows.last?.first,
+               block.bounds.minY - first.bounds.minY < 0.5 * (first.lines.first?.bounds.height ?? first.bounds.height) {
+                rows[rows.count - 1].append(block)
+            } else {
+                rows.append([block])
+            }
+        }
+        return rows.flatMap { $0.sorted { $0.bounds.minX < $1.bounds.minX } }
     }
 
     private static func continues(_ block: Block, with line: Line, hasRule: (CGRect) -> Bool) -> Bool {

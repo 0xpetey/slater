@@ -9,11 +9,11 @@ private let logger = Logger(subsystem: "com.peterjournell.slater", category: "sh
 final class AppState {
     let permissions = PermissionsManager()
     let translator = Translator()
+    let shots = ShotStore()
     @ObservationIgnored private var hotkeys: HotkeyManager?
     @ObservationIgnored private var onboarding: OnboardingWindowController?
     @ObservationIgnored private let selectionOverlay = SelectionOverlayController()
     @ObservationIgnored private var isTakingShot = false
-    @ObservationIgnored private var shotWindows: [ShotWindowController] = []
 
     func start() {
         hotkeys = HotkeyManager { [weak self] in self?.takeShot() }
@@ -77,16 +77,11 @@ final class AppState {
 
         let shot = Shot(image: crop, screenRect: globalRect, blocks: blocks)
         guard !shot.japaneseBlockIndices.isEmpty else {
-            // Milestone 6: a "No Japanese text found" notice near the cursor.
-            NSSound.beep()
+            NoticePanel.show("No Japanese text found")
             return
         }
 
-        let window = ShotWindowController(shot: shot) { [weak self] closed in
-            self?.shotWindows.removeAll { $0 === closed }
-        }
-        shotWindows.append(window)
-        window.show()
+        shots.open(shot)
         Task {
             await translator.translate(shot)
             logger.info("Translated \(shot.translations.count) blocks in \(String(describing: ContinuousClock.now - started), privacy: .public)")

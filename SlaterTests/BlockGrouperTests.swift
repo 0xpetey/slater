@@ -49,6 +49,17 @@ struct BlockGrouperTests {
         #expect(blocks.count == 2)
     }
 
+    @Test func slightlyMisalignedCellsReadLeftToRightAsOneRow() {
+        let blocks = BlockGrouper.group([
+            line("数量", x: 230, y: 28, width: 56),
+            line("品番", x: 30, y: 30, width: 56),
+            line("備考", x: 530, y: 27, width: 56),
+            line("単価", x: 350, y: 31, width: 56),
+            line("部品A", x: 30, y: 132, width: 78),
+        ])
+        #expect(blocks.map(\.text) == ["品番", "数量", "単価", "備考", "部品A"])
+    }
+
     @Test func sentenceEndingClosesTheBlock() {
         let blocks = BlockGrouper.group([
             line("資料を確認しました。", x: 10, y: 10),

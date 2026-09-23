@@ -32,6 +32,7 @@ struct OnboardingView: View {
     let translator: Translator
     let onDone: () -> Void
     @State private var download: TranslationSession.Configuration?
+    @State private var launchAtLogin = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -98,9 +99,16 @@ struct OnboardingView: View {
                 Text("Press **\(shortcut.description)** to take a Shot. You can change this in Settings.")
             }
 
+            Toggle("Open Slater when you log in", isOn: $launchAtLogin)
+
             HStack {
                 Spacer()
-                Button("Done", action: onDone)
+                Button("Done") {
+                    if launchAtLogin != LaunchAtLogin.isEnabled {
+                        LaunchAtLogin.isEnabled = launchAtLogin
+                    }
+                    onDone()
+                }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!permissions.hasScreenRecording || translator.languagePack != .installed)
             }

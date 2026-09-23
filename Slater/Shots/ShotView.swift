@@ -5,6 +5,9 @@ struct ShotView: View {
     let shot: Shot
     let state: ShotViewState
     let patches: [Patch]
+    /// Rendering for a saved image: translations only, no controls.
+    var isExporting = false
+    var onSave: () -> Void = {}
     let onClose: () -> Void
     @State private var isHovering = false
 
@@ -15,7 +18,7 @@ struct ShotView: View {
                 .interpolation(.high)
                 .gesture(WindowDragGesture())
 
-            if !state.showsOriginal {
+            if isExporting || !state.showsOriginal {
                 ForEach(patches) { patch in
                     if let translation = shot.translations[patch.index] {
                         PatchView(patch: patch, translation: translation, isLowConfidence: shot.blocks[patch.index].isLowConfidence)
@@ -27,6 +30,23 @@ struct ShotView: View {
         }
         .frame(width: shot.screenRect.width, height: shot.screenRect.height)
         .overlay(alignment: .topTrailing) {
+            if !isExporting { controls }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if state.showsOriginal && !isExporting {
+                Text("Original")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.black.opacity(0.6), in: .capsule)
+                    .foregroundStyle(.white)
+                    .padding(4)
+            }
+        }
+        .onHover { isHovering = $0 }
+    }
+
+    private var controls: some View {
             HStack(spacing: 4) {
                 if shot.state == .translating {
                     ProgressView().controlSize(.small)
@@ -36,6 +56,15 @@ struct ShotView: View {
                         .help("Translation failed")
                 }
                 if isHovering {
+                    Button(action: onSave) {
+                        Image(systemName: "square.and.arrow.down.fill")
+                            .foregroundStyle(.white)
+                            .font(.system(size: 10, weight: .semibold))
+                            .frame(width: 16, height: 16)
+                            .background(.black.opacity(0.6), in: .circle)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Save (⌘S)")
                     Button(action: onClose) {
                         Image(systemName: "xmark.circle.fill")
                             .symbolRenderingMode(.palette)
@@ -47,19 +76,6 @@ struct ShotView: View {
                 }
             }
             .padding(4)
-        }
-        .overlay(alignment: .bottomLeading) {
-            if state.showsOriginal {
-                Text("Original")
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(.black.opacity(0.6), in: .capsule)
-                    .foregroundStyle(.white)
-                    .padding(4)
-            }
-        }
-        .onHover { isHovering = $0 }
     }
 }
 
