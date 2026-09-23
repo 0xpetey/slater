@@ -38,9 +38,11 @@ Environment: macOS 26.6, Xcode 26.6, Swift 6.3. The app will **require macOS 26*
 | `ScreenCapturer` | Captures each display at native resolution, excluding Slater's own windows | ScreenCaptureKit: `SCShareableContent`, `SCContentFilter(display:excludingApplications: [Slater], exceptingWindows: [])`, `SCScreenshotManager.captureImage(contentFilter:configuration:)` |
 | `SelectionOverlayController` | One borderless `NSPanel` per screen at `.screenSaver` level; shows the frozen image and draws the rectangle as you drag | `NSPanel`, `NSView` mouse events, `NSCursor.crosshair` |
 | `CoordinateMapper` | Converts between AppKit points (origin bottom-left, spans all screens), capture pixels (origin top-left, Retina scale) and Vision's normalized boxes (origin bottom-left) | Pure functions, unit-tested |
-| `ImagePreprocessor` | Prepares the crop for OCR: scales small crops up 2–3×, normalizes contrast, and straightens slightly rotated scans | Core Image (`CIColorControls`, a lanczos scale transform), Vision `DetectDocumentSegmentationRequest` / horizon detection to straighten |
-| `TextRecognizer` | Runs OCR on the prepared `CGImage` and returns Lines | Vision `RecognizeTextRequest`: `.accurate`, `recognitionLanguages = [ja-JP, en-US]`, language correction on |
-| `BlockGrouper` | Merges Lines into Blocks. Lines merge only when they are stacked: the vertical gap is under about 1 line height and they overlap horizontally. Text side by side never merges. A Line ending in 。 closes its Block. Each Block is classified as Japanese (it contains any character in the Hiragana, Katakana or Han Unicode scripts) or Passthrough. | Pure logic, unit-tested with table, form and paragraph fixtures |
+| `ImagePreprocessor` | Makes the second OCR copy: upscales to about 3 px per point and applies grayscale plus contrast. No straightening: Vision read 2–3° rotated scans correctly. | Core Image (`CILanczosScaleTransform`, `CIColorControls`) |
+| `TextRecognizer` | One OCR pass over an image, returning Lines | Vision `RecognizeTextRequest`: `.accurate`, `recognitionLanguages = [ja-JP, en-US]`, language correction on (turning it off caused 未/末 misreads) |
+| `TextReader` | Reads the crop twice in parallel, raw and preprocessed, and reconciles the readings: agreement means trusted; disagreement means the longer text wins and the Line is marked Low-confidence (ADR 0002). Also rejoins a Line that one reading split in two. | `async let`, union-find over overlapping Lines |
+| `RuleDetector` | Finds horizontal rules (gridlines, table borders) in the gap between two Lines | 8-bit grayscale pixel scan of the crop |
+| `BlockGrouper` | Merges Lines into Blocks. Lines merge only when they are stacked: the vertical gap is at most 0.8 line heights, they overlap horizontally, their heights are similar, both are Japanese or both are not, and no rule is drawn between them. Text side by side never merges. A Line ending in 。！？ closes its Block. Each Block is classified as Japanese (it contains any character in the Hiragana, Katakana or Han Unicode scripts) or Passthrough. | Pure logic, unit-tested with table, form and paragraph fixtures |
 | `Translator` | ja → en on-device translation. The target language is a single constant (English); there's no setting in version 1. | `LanguageAvailability().status(from:to:)`, `TranslationSession(installedSource:target:)`, batch `translations(from:)` with `clientIdentifier` to map results back to Blocks |
 | `Shot` (model) | The frozen image, Blocks, translations and the original screen rect | `@Observable` class |
 | `ShotStore` | The open Shots; feeds the menu bar list, Close All, and focus | `@Observable`, owned by `AppState` |
@@ -50,7 +52,7 @@ Environment: macOS 26.6, Xcode 26.6, Swift 6.3. The app will **require macOS 26*
 | `PermissionsManager` | Screen Recording permission check and prompt; first-run onboarding | `CGPreflightScreenCaptureAccess`, `CGRequestScreenCaptureAccess`, a link to System Settings |
 
 The pipeline is a single `async` function started by the hotkey:
-`capture → select → crop → preprocess → recognize → group → translate → open Shot`
+`capture → select → crop → read (raw ∥ preprocessed, reconciled) → group → translate → open Shot`
 The Shot window opens as soon as the box is chosen and shows a "translating…" spinner until the translations arrive.
 
 ## Project layout
@@ -79,7 +81,9 @@ This Mac is not enrolled in device management (MDM). If your work Mac is a diffe
 
 ## Risks and how to handle them
 - **Language pack not installed:** the pack is downloaded during onboarding. If it's deleted later, the first Shot checks `LanguageAvailability`. If it reports `.supported` but the pack isn't installed, show a prompt that triggers the system download through SwiftUI `.translationTask` with `prepareTranslation()`.
-- **Poor-quality scans:** handled by `ImagePreprocessor`. Test this against real bad scans early (milestone 3), because it's the weakest part of OCR.
+- **Poor-quality scans:** the preprocessed reading handles moderate blur. Very heavy blur returns no text at all, so Slater shows the "No Japanese text found" notice.
+- **Borderless tables where every cell is Japanese** and rows are spaced like body text can still merge rows into one Block, because nothing in the image separates them. Gridlines, a Passthrough cell or wider row spacing all keep rows apart.
+- **OCR time:** two readings run in parallel. A paragraph takes about 0.2–0.3 s; a full dense page takes about 2 s.
 - **Vertical Japanese text:** out of scope for version 1, since it's rare in business documents.
 - **Multiple monitors or mixed scaling:** the selection is limited to the screen where the drag starts. `CoordinateMapper` tests cover mixed scaling between screens.
 - **Stale permission after a rebuild:** document `tccutil reset ScreenCapture <bundle-id>` in the README.
@@ -87,7 +91,7 @@ This Mac is not enrolled in device management (MDM). If your work Mac is a diffe
 ## Milestones
 1. **Skeleton:** menu bar app, hotkey, Screen Recording permission flow.
 2. **Capture and select:** frozen-screen selection. The crop is shown in a temporary preview window placed exactly where it came from, so you can check it lines up with the screen underneath. It's kept in memory only, per ADR 0001, and replaced by Shot windows in milestone 5.
-3. **OCR:** preprocessing, Vision recognition and `BlockGrouper`; print the Blocks with their confidence scores to the console. Test with spreadsheets and bad scans, and tune the low-confidence threshold (a Block's confidence is its lowest Line confidence) against real bad scans.
+3. **OCR:** two readings (raw and preprocessed) reconciled by `TextReader`, then `RuleDetector` and `BlockGrouper`. The temporary preview outlines Blocks: blue for Japanese, orange for Low-confidence, grey for Passthrough. Block text goes to stdout in Debug builds only, never the system log.
 4. **Translate:** Translator with the language-pack check; the details panel shows Japanese ↔ English.
 5. **Shot windows:** in-place window, background sampling, fitted and truncated text, hover, Space toggle, drag, Esc/✕.
 6. **Shot management and polish:** ShotStore, Open Shots menu section, Close All, save to disk (`ShotExporter`), Settings (hotkey, launch at login), onboarding (permission, language pack, launch at login on by default), the "No Japanese text found" notice.
@@ -96,8 +100,8 @@ This Mac is not enrolled in device management (MDM). If your work Mac is a diffe
 ## Verification
 - **Unit tests** (`xcodebuild test`):
   - `CoordinateMapper` round-trips with 1× and 2× scaling and offset screens.
-  - `BlockGrouper` on table, form and wrapped-paragraph line boxes.
-  - `TextRecognizer` on fixture PNGs, checking that the expected strings are found.
+  - `BlockGrouper`, `TextReader.reconcile` and Block kind on synthetic Lines.
+  - End-to-end OCR plus grouping on fixture PNGs generated by `scripts/make-fixtures.swift`: paragraph, airy paragraph, spreadsheet, bordered all-Japanese list, small 1× text and a poor scan.
 - **Manual end-to-end checks:**
   - A Japanese web page in Safari, a PDF in Preview, a Numbers or Excel sheet, and a poor-quality scan.
   - Take a Shot over an area an existing Shot covers: the new Shot translates the document underneath, and the old Shot stays open.

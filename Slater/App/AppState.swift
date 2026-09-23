@@ -51,10 +51,22 @@ final class AppState {
         )
         guard let crop = capture.image.cropping(to: pixelRect) else { return }
         let globalRect = CoordinateMapper.globalRect(forLocalRect: selection.localRect, screenFrame: capture.screen.frame)
-        logger.info("Selected \(String(describing: globalRect), privacy: .public) as \(crop.width)×\(crop.height) px")
 
-        // Milestone 3 onwards: recognize, translate and open a Shot. For now, show the crop in place.
-        let preview = CapturePreviewController(image: crop, globalRect: globalRect) { [weak self] closed in
+        let started = ContinuousClock.now
+        let pixelsPerPoint = CGFloat(capture.image.width) / capture.screen.frame.width
+        let lines = try await TextReader.read(crop, pixelsPerPoint: pixelsPerPoint)
+        let rules = RuleDetector(image: crop)
+        let blocks = BlockGrouper.group(lines, hasRule: rules.hasHorizontalRule)
+        // Never log recognized text: the unified log is written to disk (ADR 0001).
+        logger.info("Recognized \(lines.count) lines in \(blocks.count) blocks in \(String(describing: ContinuousClock.now - started), privacy: .public)")
+        #if DEBUG
+        for block in blocks {
+            print("[\(block.kind)\(block.isLowConfidence ? ", low confidence" : "")] \(block.text)")
+        }
+        #endif
+
+        // Milestone 4 onwards: translate and open a Shot. For now, show the crop in place with its Blocks outlined.
+        let preview = CapturePreviewController(image: crop, blocks: blocks, globalRect: globalRect) { [weak self] closed in
             self?.previews.removeAll { $0 === closed }
         }
         previews.append(preview)
