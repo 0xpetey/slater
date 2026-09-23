@@ -10,7 +10,6 @@ final class ShotWindowController: Identifiable {
     /// A small copy of the original image for the menu bar's Open Shots list.
     let thumbnail: NSImage
     private let panel: KeyablePanel
-    private let patches: [Patch]
     private let viewState = ShotViewState()
     private var details: DetailsPanelController?
     private var spaceDownAt: TimeInterval?
@@ -22,7 +21,6 @@ final class ShotWindowController: Identifiable {
     init(shot: Shot, onClose: @escaping (ShotWindowController) -> Void) {
         self.shot = shot
         self.onClose = onClose
-        patches = ShotLayout.patches(for: shot)
         let thumbnailHeight: CGFloat = 18
         let aspect = CGFloat(shot.image.width) / CGFloat(shot.image.height)
         thumbnail = NSImage(cgImage: shot.image, size: CGSize(width: min(thumbnailHeight * aspect, 64), height: thumbnailHeight))
@@ -33,7 +31,6 @@ final class ShotWindowController: Identifiable {
         let container = ShotContainerView(rootView: ShotView(
             shot: shot,
             state: viewState,
-            patches: patches,
             onSave: { [weak self] in self?.save() },
             onClose: { [weak self] in self?.close() }
         ))
@@ -120,7 +117,7 @@ final class ShotWindowController: Identifiable {
 
     /// The Shot as it looks with translations, at the original image's resolution.
     private func renderTranslatedImage() -> CGImage? {
-        let renderer = ImageRenderer(content: ShotView(shot: shot, state: viewState, patches: patches, isExporting: true, onClose: {}))
+        let renderer = ImageRenderer(content: ShotView(shot: shot, state: viewState, isExporting: true, onClose: {}))
         renderer.scale = CGFloat(shot.image.width) / shot.screenRect.width
         return renderer.cgImage
     }

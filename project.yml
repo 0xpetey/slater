@@ -2,7 +2,7 @@ name: Slater
 options:
   bundleIdPrefix: com.peterjournell
   deploymentTarget:
-    macOS: "26.0"
+    macOS: "26.4"
   createIntermediateGroups: true
 settings:
   base:
@@ -31,6 +31,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peterjournell.slater
+        # So tests and benchmarks can run against Release (optimized) builds too.
+        ENABLE_TESTABILITY: YES
     info:
       path: Slater/App/Info.plist
       properties:

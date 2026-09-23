@@ -9,23 +9,77 @@ import Observation
 final class Shot {
     enum State { case translating, translated, failed }
 
+    /// The translation of one distinct Japanese text. Blocks with the same text share a slot, so
+    /// the text is translated once, and each patch re-renders only when its own slot fills.
+    @MainActor
+    @Observable
+    final class TranslationSlot {
+        let source: String
+        var text: String?
+
+        init(source: String) {
+            self.source = source
+        }
+    }
+
     let image: CGImage
     /// Where the box was, in global AppKit points.
     let screenRect: CGRect
-    let blocks: [Block]
     let createdAt = Date.now
-    /// English for each Japanese Block, keyed by index into `blocks`. Filled in as results arrive.
-    var translations: [Int: String] = [:]
+    private(set) var blocks: [Block] = []
+    private(set) var patches: [Patch] = []
+    /// Keyed by the Japanese text.
+    private(set) var slots: [String: TranslationSlot] = [:]
+    /// Texts sent to the translator that haven't come back yet.
+    var pendingTexts: Set<String> = []
     var state = State.translating
+    /// The corrected OCR reading has been applied (or wasn't needed), so the text is final.
+    var isVerified = false
+    private let sampler: ColorSampler
 
     init(image: CGImage, screenRect: CGRect, blocks: [Block]) {
         self.image = image
         self.screenRect = screenRect
-        self.blocks = blocks
+        sampler = ColorSampler(image: image)
+        update(blocks: blocks)
+    }
+
+    /// Replaces the Blocks, keeping the translations of texts that are still present.
+    func update(blocks newBlocks: [Block]) {
+        blocks = newBlocks
+        let texts = Set(japaneseBlockIndices.map { blocks[$0].text })
+        slots = slots.filter { texts.contains($0.key) }
+        for text in texts where slots[text] == nil {
+            slots[text] = TranslationSlot(source: text)
+        }
+        pendingTexts.formIntersection(texts)
+        patches = ShotLayout.patches(
+            for: blocks,
+            indices: japaneseBlockIndices,
+            pointsPerPixel: screenRect.width / CGFloat(image.width),
+            windowSize: screenRect.size,
+            background: sampler.background(around:),
+            clearWidth: sampler.clearWidth(rightOf:background:)
+        )
     }
 
     var japaneseBlockIndices: [Int] {
         blocks.indices.filter { blocks[$0].kind == .japanese }
+    }
+
+    func slot(for blockIndex: Int) -> TranslationSlot? {
+        slots[blocks[blockIndex].text]
+    }
+
+    func setTranslation(_ translation: String, for source: String) {
+        slots[source]?.text = translation
+    }
+
+    /// English for each translated Japanese Block, keyed by index into `blocks`.
+    var translations: [Int: String] {
+        Dictionary(uniqueKeysWithValues: japaneseBlockIndices.compactMap { index in
+            slot(for: index)?.text.map { (index, $0) }
+        })
     }
 
     /// Every translation, one Block per line, for pasting into an email or reply.
@@ -51,6 +105,7 @@ final class Shot {
 
     /// The saved text file: each Japanese Block quoted, then its translation.
     func markdown(title: String) -> String {
+        let translations = translations
         let entries = japaneseBlockIndices.map { index in
             let block = blocks[index]
             let warning = block.isLowConfidence ? " ⚠️ Low OCR confidence: check against the original image" : ""
@@ -61,7 +116,8 @@ final class Shot {
 
     /// Each Japanese Block followed by its translation, for quoting or asking a colleague to check.
     var bilingualText: String {
-        japaneseBlockIndices.map { index in
+        let translations = translations
+        return japaneseBlockIndices.map { index in
             [blocks[index].text, translations[index]].compactMap { $0 }.joined(separator: "\n")
         }
         .joined(separator: "\n\n")

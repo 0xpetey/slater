@@ -20,19 +20,6 @@ enum ShotLayout {
     /// Patches extend this far past the OCR bounds, in points, to cover glyph edges.
     static let outset: CGFloat = 1.5
 
-    @MainActor
-    static func patches(for shot: Shot) -> [Patch] {
-        let sampler = ColorSampler(image: shot.image)
-        return patches(
-            for: shot.blocks,
-            indices: shot.japaneseBlockIndices,
-            pointsPerPixel: shot.screenRect.width / CGFloat(shot.image.width),
-            windowSize: shot.screenRect.size,
-            background: sampler.background(around:),
-            clearWidth: sampler.clearWidth(rightOf:background:)
-        )
-    }
-
     static func patches(
         for blocks: [Block],
         indices: [Int],

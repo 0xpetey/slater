@@ -31,11 +31,21 @@ final class AppState {
             // loading it now means the first Shot only pays the usual per-text time.
             translator.warmUp()
         }
-        // macOS may unload the model while the Mac sleeps.
+        Task { await TextRecognizer.warmUp() }
+        ScreenCapturer.warmUp()
+        // macOS may unload the models while the Mac sleeps.
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.translator.warmUp() }
+            MainActor.assumeIsolated {
+                self?.translator.warmUp()
+                ScreenCapturer.warmUp()
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { ScreenCapturer.warmUp() }
         }
     }
 
@@ -53,20 +63,20 @@ final class AppState {
         }
         isTakingShot = true
         translator.warmUp()
+        let pressed = ContinuousClock.now
         Task {
             defer { isTakingShot = false }
             do {
-                try await captureAndSelect()
+                try await captureAndSelect(pressedAt: pressed)
             } catch {
                 logger.error("Capture failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
 
-    private func captureAndSelect() async throws {
-        let captureStarted = ContinuousClock.now
+    private func captureAndSelect(pressedAt pressed: ContinuousClock.Instant) async throws {
         let captures = try await ScreenCapturer.captureAllDisplays()
-        logger.notice("Captured \(captures.count) displays in \(milliseconds(since: captureStarted)) ms")
+        logger.notice("Captured \(captures.count) displays \(milliseconds(since: pressed)) ms after the hotkey")
         guard let selection = await selectionOverlay.select(from: captures) else { return }
 
         let capture = captures[selection.captureIndex]
@@ -80,33 +90,65 @@ final class AppState {
 
         let started = ContinuousClock.now
         let pixelsPerPoint = CGFloat(capture.image.width) / capture.screen.frame.width
-        let lines = try await TextReader.read(crop, pixelsPerPoint: pixelsPerPoint)
-        let readTime = milliseconds(since: started)
+        // The corrected reading takes about 2.4× as long as the quick one, so it starts now and
+        // verifies the Shot once it's already on screen (ADR 0002).
+        async let correctedLines = TextReader.correctedRead(crop, pixelsPerPoint: pixelsPerPoint)
+        let quickLines = try await TextReader.quickRead(crop)
+        let quickTime = milliseconds(since: started)
         let rules = RuleDetector(image: crop)
-        let blocks = BlockGrouper.group(lines, hasRule: rules.hasRule)
+        var blocks = BlockGrouper.group(quickLines, hasRule: rules.hasRule)
+        var isVerified = false
+
+        if !blocks.contains(where: { $0.kind == .japanese }) {
+            // Rare: the quick reading may have missed faint text, so wait for the corrected one
+            // before deciding there's nothing to translate.
+            blocks = BlockGrouper.group(TextReader.reconcile(quick: quickLines, corrected: try await correctedLines), hasRule: rules.hasRule)
+            isVerified = true
+            guard blocks.contains(where: { $0.kind == .japanese }) else {
+                logger.notice("No Japanese text found \(milliseconds(since: started)) ms after selection")
+                NoticePanel.show("No Japanese text found")
+                return
+            }
+        }
+
+        let shot = Shot(image: crop, screenRect: globalRect, blocks: blocks)
+        shot.isVerified = isVerified
+        shots.open(shot)
         // Timings and counts only. Never log recognized text: the log is written to disk (ADR 0001).
         logger.notice("""
-            Read \(crop.width)×\(crop.height) px: \(lines.count) lines (\(lines.count { $0.isVertical }) vertical) \
-            in \(readTime) ms; \(blocks.count) blocks (\(blocks.count { $0.kind == .japanese }) Japanese, \
-            \(blocks.count { $0.isVertical }) vertical, longest \(blocks.map(\.text.count).max() ?? 0) characters) \
-            after \(milliseconds(since: started)) ms
+            Quick reading of \(crop.width)×\(crop.height) px: \(quickLines.count) lines \
+            (\(quickLines.count { $0.isVertical }) vertical) in \(quickTime) ms; Shot open \(milliseconds(since: started)) ms \
+            after selection with \(blocks.count) blocks (\(blocks.count { $0.kind == .japanese }) Japanese, \
+            longest \(blocks.map(\.text.count).max() ?? 0) characters)
             """)
         #if DEBUG
         for block in blocks {
-            print("[\(block.kind)\(block.isLowConfidence ? ", low confidence" : "")] \(block.text)")
+            print("[\(block.kind)] \(block.text)")
         }
         #endif
+        Task { await translator.translate(shot) }
+        guard !isVerified else { return }
 
-        let shot = Shot(image: crop, screenRect: globalRect, blocks: blocks)
-        guard !shot.japaneseBlockIndices.isEmpty else {
-            NoticePanel.show("No Japanese text found")
-            return
-        }
-
-        shots.open(shot)
-        Task {
+        do {
+            let lines = TextReader.reconcile(quick: quickLines, corrected: try await correctedLines)
+            let correctedBlocks = BlockGrouper.group(lines, hasRule: rules.hasRule)
+            let quickTexts = Set(blocks.map(\.text))
+            let changed = correctedBlocks.count { !quickTexts.contains($0.text) }
+            shot.update(blocks: correctedBlocks)
+            shot.isVerified = true
+            logger.notice("""
+                Corrected reading applied \(milliseconds(since: started)) ms after selection: \
+                \(changed) of \(correctedBlocks.count) blocks changed, \(correctedBlocks.count(where: \.isLowConfidence)) low-confidence
+                """)
+            #if DEBUG
+            for block in correctedBlocks where !quickTexts.contains(block.text) {
+                print("[corrected, \(block.kind)\(block.isLowConfidence ? ", low confidence" : "")] \(block.text)")
+            }
+            #endif
             await translator.translate(shot)
-            logger.notice("Shot complete \(milliseconds(since: started)) ms after selection")
+        } catch {
+            shot.isVerified = true
+            logger.error("Corrected reading failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

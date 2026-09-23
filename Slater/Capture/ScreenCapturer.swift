@@ -9,10 +9,34 @@ struct DisplayCapture {
 
 @MainActor
 enum ScreenCapturer {
-    /// Captures every display at native resolution. Slater's own windows (open Shots,
-    /// menus, onboarding) are excluded, so a new Shot always sees the content underneath.
+    /// The display list, fetched ahead of time: it costs 20–30 ms, which would otherwise be
+    /// paid between the hotkey press and the frozen screen appearing.
+    private static var content: SCShareableContent?
+
+    /// Fetches the display list, and makes one throwaway capture, because the first capture in
+    /// a process costs about 70 ms more than the rest. Called at launch, after each Shot, and
+    /// when displays change.
+    static func warmUp() {
+        Task {
+            content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        }
+        Task {
+            _ = try? await SCScreenshotManager.captureImage(in: CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+    }
+
+    /// Captures every display at native resolution. Slater's own windows (open Shots, menus,
+    /// onboarding) are excluded, so a new Shot always sees the content underneath.
     static func captureAllDisplays() async throws -> [DisplayCapture] {
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        let content: SCShareableContent
+        if let cached = Self.content {
+            content = cached
+        } else {
+            content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        }
+        // Windows come and go, which is harmless since the filter is by application, but keep
+        // the list fresh for the next Shot anyway.
+        defer { warmUp() }
         let slater = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
 
         var captures: [DisplayCapture] = []

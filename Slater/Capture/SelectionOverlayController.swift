@@ -1,4 +1,7 @@
 import AppKit
+import os
+
+private let logger = Logger(subsystem: "com.peterjournell.slater", category: "shots")
 
 /// Shows each display's frozen Capture full-screen and lets the user drag a box on one of them.
 @MainActor
@@ -17,6 +20,7 @@ final class SelectionOverlayController {
     func select(from captures: [DisplayCapture]) async -> Selection? {
         await withCheckedContinuation { continuation in
             self.continuation = continuation
+            let started = ContinuousClock.now
             let mouse = NSEvent.mouseLocation
             for (index, capture) in captures.enumerated() {
                 let panel = KeyablePanel(contentRect: capture.screen.frame)
@@ -33,6 +37,8 @@ final class SelectionOverlayController {
                 }
             }
             NSCursor.crosshair.set()
+            let elapsed = ContinuousClock.now - started
+            logger.notice("Selection overlay shown in \(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000) ms")
         }
     }
 

@@ -9,7 +9,7 @@ struct SlaterApp: App {
             MenuContent(appState: appDelegate.appState)
         }
         Settings {
-            SettingsView()
+            SettingsView(translator: appDelegate.appState.translator)
         }
     }
 }

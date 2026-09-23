@@ -55,9 +55,11 @@ struct ColorSampler {
     /// How many pixels of empty background lie to the right of `bounds` before the next text,
     /// gridline or image edge. Patches extend into this space instead of shrinking their text.
     func clearWidth(rightOf bounds: CGRect, background: RGB) -> Int {
-        let rows = max(0, Int(bounds.minY))..<min(height, Int(bounds.maxY.rounded(.up)))
+        let firstRow = max(0, Int(bounds.minY))
+        let endRow = min(height, Int(bounds.maxY.rounded(.up)))
         let start = Int(bounds.maxX.rounded(.up)) + Self.margin
-        guard !rows.isEmpty, start < width else { return 0 }
+        guard firstRow < endRow, start < width else { return 0 }
+        let rows = firstRow..<endRow
         let target = [background.red, background.green, background.blue].map { $0 * 255 }
 
         for x in start..<width {

@@ -1,4 +1,5 @@
 import AppKit
+import Synchronization
 
 /// Picks the largest font size that fits a translation into its Block's box. Below the
 /// minimum size the text is truncated instead, and the full translation is shown on hover.
@@ -18,9 +19,29 @@ enum FitText {
         var lineLimit: Int
     }
 
+    /// Fits already measured. A fit takes about ten text measurements, and SwiftUI asks for
+    /// the same one again whenever a Shot re-renders, such as on hover.
+    private static let cache = Mutex<[String: Fit]>([:])
+    private static let cacheLimit = 512
+
     /// `lineHeight` is the height of one of the Block's original Lines, which caps the font
     /// size so a short translation doesn't balloon to fill a tall box.
     static func fit(_ text: String, in size: CGSize, lineHeight: CGFloat) -> Fit {
+        let key = "\(size.width)×\(size.height)/\(lineHeight)\u{1F}\(text)"
+        if let cached = cache.withLock({ $0[key] }) { return cached }
+        let fit = measure(text, in: size, lineHeight: lineHeight)
+        cache.withLock { cache in
+            if cache.count >= cacheLimit { cache.removeAll(keepingCapacity: true) }
+            cache[key] = fit
+        }
+        return fit
+    }
+
+    static func font(ofSize size: CGFloat) -> NSFont {
+        .systemFont(ofSize: size)
+    }
+
+    private static func measure(_ text: String, in size: CGSize, lineHeight: CGFloat) -> Fit {
         let width = max(1, size.width - 2 * padding)
         let largest = min(maximumSize, max(minimumSize, lineHeight * 0.8))
 
@@ -37,10 +58,6 @@ enum FitText {
         if fits(text, width: width, height: size.height, fontSize: high) { low = high }
         let lines = max(1, Int(size.height / lineHeightOf(fontSize: low)))
         return Fit(fontSize: low, isTruncated: false, lineLimit: lines)
-    }
-
-    static func font(ofSize size: CGFloat) -> NSFont {
-        .systemFont(ofSize: size)
     }
 
     private static func fits(_ text: String, width: CGFloat, height: CGFloat, fontSize: CGFloat) -> Bool {

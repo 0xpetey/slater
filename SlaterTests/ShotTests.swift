@@ -15,14 +15,15 @@ private func makeShot(_ texts: [String]) -> Shot {
 struct ShotTests {
     @Test func copyTextSkipsPassthroughBlocks() {
         let shot = makeShot(["品番", "AB-1024", "備考"])
-        shot.translations = [0: "Item number", 2: "Remarks"]
+        shot.setTranslation("Item number", for: "品番")
+        shot.setTranslation("Remarks", for: "備考")
         #expect(shot.englishText == "Item number\nRemarks")
         #expect(shot.bilingualText == "品番\nItem number\n\n備考\nRemarks")
     }
 
     @Test func bilingualTextShowsJapaneseWhileTranslationIsPending() {
         let shot = makeShot(["品番", "備考"])
-        shot.translations = [0: "Item number"]
+        shot.setTranslation("Item number", for: "品番")
         #expect(shot.bilingualText == "品番\nItem number\n\n備考")
     }
 }

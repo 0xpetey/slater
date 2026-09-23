@@ -4,7 +4,6 @@ import SwiftUI
 struct ShotView: View {
     let shot: Shot
     let state: ShotViewState
-    let patches: [Patch]
     /// Rendering for a saved image: translations only, no controls.
     var isExporting = false
     var onSave: () -> Void = {}
@@ -19,9 +18,9 @@ struct ShotView: View {
                 .gesture(WindowDragGesture())
 
             if isExporting || !state.showsOriginal {
-                ForEach(patches) { patch in
-                    if let translation = shot.translations[patch.index] {
-                        PatchView(patch: patch, translation: translation, isLowConfidence: shot.blocks[patch.index].isLowConfidence)
+                ForEach(shot.patches) { patch in
+                    if let slot = shot.slot(for: patch.index) {
+                        PatchView(patch: patch, slot: slot, isLowConfidence: shot.blocks[patch.index].isLowConfidence)
                             .frame(width: patch.frame.width, height: patch.frame.height)
                             .offset(x: patch.frame.minX, y: patch.frame.minY)
                     }
@@ -47,40 +46,55 @@ struct ShotView: View {
     }
 
     private var controls: some View {
-            HStack(spacing: 4) {
-                if shot.state == .translating {
-                    ProgressView().controlSize(.small)
-                } else if shot.state == .failed {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .help("Translation failed")
-                }
-                if isHovering {
-                    Button(action: onSave) {
-                        Image(systemName: "square.and.arrow.down.fill")
-                            .foregroundStyle(.white)
-                            .font(.system(size: 10, weight: .semibold))
-                            .frame(width: 16, height: 16)
-                            .background(.black.opacity(0.6), in: .circle)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Save (⌘S)")
-                    Button(action: onClose) {
-                        Image(systemName: "xmark.circle.fill")
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .black.opacity(0.6))
-                            .font(.system(size: 16))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Close (Esc)")
-                }
+        HStack(spacing: 4) {
+            // Busy until every translation is in and the corrected OCR reading has been applied.
+            if shot.state == .translating || !shot.isVerified {
+                ProgressView().controlSize(.small)
+            } else if shot.state == .failed {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .help("Translation failed")
             }
-            .padding(4)
+            if isHovering {
+                Button(action: onSave) {
+                    Image(systemName: "square.and.arrow.down.fill")
+                        .foregroundStyle(.white)
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 16, height: 16)
+                        .background(.black.opacity(0.6), in: .circle)
+                }
+                .buttonStyle(.plain)
+                .help("Save (⌘S)")
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, .black.opacity(0.6))
+                        .font(.system(size: 16))
+                }
+                .buttonStyle(.plain)
+                .help("Close (Esc)")
+            }
+        }
+        .padding(4)
+    }
+}
+
+/// One Block's patch. It observes only its own translation slot, so a translation arriving
+/// for another Block doesn't re-render it.
+private struct PatchView: View {
+    let patch: Patch
+    let slot: Shot.TranslationSlot
+    let isLowConfidence: Bool
+
+    var body: some View {
+        if let translation = slot.text {
+            TranslatedPatch(patch: patch, translation: translation, isLowConfidence: isLowConfidence)
+        }
     }
 }
 
 /// One Block's translation, on a patch of its background color.
-private struct PatchView: View {
+private struct TranslatedPatch: View {
     let patch: Patch
     let translation: String
     let isLowConfidence: Bool
