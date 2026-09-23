@@ -8,8 +8,9 @@ enum BlockGrouper {
     /// Largest gap between Lines that continue one another, as a fraction of line height (or
     /// column width). Paragraphs with a CSS line height of 1.8 measure about 0.5.
     static let maximumGap: CGFloat = 0.8
-    /// Lines of very different sizes (a heading over body text) don't merge.
-    static let heightRatioRange: ClosedRange<CGFloat> = 0.6...1.6
+    /// Lines of very different sizes (a heading over body text) don't merge. Loose enough for
+    /// the boxes of a slightly skewed scan, where a long line's box is taller than a short one's.
+    static let heightRatioRange: ClosedRange<CGFloat> = 0.55...1.8
     /// A Line ending in one of these closes its Block, even if the next Line is close.
     static let sentenceEndings: Set<Character> = ["。", "！", "？"]
 

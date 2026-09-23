@@ -46,6 +46,13 @@ struct RecognitionTests {
         #expect(texts == ["担当者", "田中", "佐藤", "部署", "営業部", "開発部"])
     }
 
+    @Test func gothicFontsTouIsRecoveredByTheHalfScaleReading() async throws {
+        // Vision glues 当 to a neighbor in Hiragino Sans at Retina scale; the half-scale reading
+        // reads it apart and the merge flag lets it win (ADR 0002).
+        let texts = try await blocks("tou").map(\.text)
+        #expect(texts == ["担当者は営業部の田中です。", "当社の該当製品は本日出荷済みです。", "本当に当日中に対応します。"])
+    }
+
     @Test func verticalWritingReadsColumnsRightToLeft() async throws {
         let result = try await blocks("vertical")
         #expect(result.map(\.text) == ["本契約の内容は、両当事者の書面による合意なしに変更できないものとする。", "納期は十月十五日です。"])

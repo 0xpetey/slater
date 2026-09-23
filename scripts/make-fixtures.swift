@@ -113,6 +113,14 @@ let vertical = render("vertical", size: CGSize(width: 140, height: 260)) { conte
 }
 save(vertical, "vertical.png")
 
+// Gothic fonts' 当: Vision glues it to a neighbor at Retina scale (ADR 0002).
+let tou = render("tou", size: CGSize(width: 340, height: 100)) { _ in
+    text("担当者は営業部の田中です。", at: CGPoint(x: 12, y: 12), size: 13)
+    text("当社の該当製品は本日出荷済みです。", at: CGPoint(x: 12, y: 40), size: 13)
+    text("本当に当日中に対応します。", at: CGPoint(x: 12, y: 68), size: 13)
+}
+save(tou, "tou.png")
+
 // Small UI text at 1× scale.
 let small = render("small", size: CGSize(width: 300, height: 40), scale: 1) { _ in
     text("保存されていない変更があります。", at: CGPoint(x: 8, y: 12), size: 11)

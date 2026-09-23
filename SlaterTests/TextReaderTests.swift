@@ -29,6 +29,20 @@ struct TextReaderTests {
         #expect(lines.map(\.isLowConfidence) == [true])
     }
 
+    @Test func aReadingWithAMergedGlyphLosesEvenIfItIsLonger() {
+        // 当社 read as one wide glyph "社" in the quick reading; the corrected one read it apart.
+        var merged = line("社の該製品は本日出荷済みです。", x: 10)
+        merged.hasSuspectedMerge = true
+        let lines = TextReader.reconcile(quick: [merged], corrected: [line("当社の該当製品は本日出荷済みです。", x: 10)])
+        #expect(lines.map(\.text) == ["当社の該当製品は本日出荷済みです。"])
+        #expect(lines.map(\.isLowConfidence) == [true])
+
+        var longerButMerged = line("皆社の該当製品は本日出荷済みです。", x: 10)
+        longerButMerged.hasSuspectedMerge = true
+        let reversed = TextReader.reconcile(quick: [line("社の該当製品は本日出荷済みです。", x: 10)], corrected: [longerButMerged])
+        #expect(reversed.map(\.text) == ["社の該当製品は本日出荷済みです。"])
+    }
+
     @Test func aLineSplitInOneReadingIsJoined() {
         let quick = [line("未確認の項目は、担当者が確認する", x: 10, width: 300), line("まで出荷できません。", x: 320, width: 150)]
         let corrected = [line("未確認の項目は、担当者が確認するまで出荷できません。", x: 10, width: 460)]
