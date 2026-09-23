@@ -2,8 +2,10 @@ import AppKit
 import ScreenCaptureKit
 
 /// One display's pixels at the moment the hotkey was pressed.
-struct DisplayCapture {
-    let screen: NSScreen
+struct DisplayCapture: Sendable {
+    let displayID: CGDirectDisplayID
+    /// The screen's frame in global AppKit points.
+    let frame: CGRect
     let image: CGImage
 }
 
@@ -49,7 +51,7 @@ enum ScreenCapturer {
             configuration.captureResolution = .best
             configuration.showsCursor = false
             let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
-            captures.append(DisplayCapture(screen: screen, image: image))
+            captures.append(DisplayCapture(displayID: display.displayID, frame: screen.frame, image: image))
         }
         return captures
     }

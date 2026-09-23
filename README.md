@@ -15,7 +15,7 @@ open build/DerivedData/Build/Products/Release/Slater.app
 
 Use the Release configuration for day-to-day use: Debug builds skip Swift's optimizer, which makes the pixel sampling and text grouping several times slower. Or open `Slater.xcodeproj` in Xcode after generating it.
 
-Tests:
+Tests (run them in Debug, the default; `xcodebuild test` in Release embeds the test frameworks into the app it builds):
 
 ```sh
 xcodebuild -project Slater.xcodeproj -scheme Slater -derivedDataPath build/DerivedData test

@@ -75,21 +75,31 @@ final class AppState {
     }
 
     private func captureAndSelect(pressedAt pressed: ContinuousClock.Instant) async throws {
-        let captures = try await ScreenCapturer.captureAllDisplays()
-        logger.notice("Captured \(captures.count) displays \(milliseconds(since: pressed)) ms after the hotkey")
-        guard let selection = await selectionOverlay.select(from: captures) else { return }
+        // The overlay goes up over the live screen at once; the capture freezes it ~80 ms later.
+        selectionOverlay.show()
+        let captureTask = Task { try await ScreenCapturer.captureAllDisplays() }
+        Task {
+            let captures = try await captureTask.value
+            selectionOverlay.freeze(with: captures)
+            logger.notice("Captured \(captures.count) displays \(milliseconds(since: pressed)) ms after the hotkey")
+        }
+        guard let selection = await selectionOverlay.select() else {
+            captureTask.cancel()
+            return
+        }
+        let captures = try await captureTask.value
+        guard let capture = captures.first(where: { $0.displayID == selection.displayID }) else { return }
 
-        let capture = captures[selection.captureIndex]
         let pixelRect = CoordinateMapper.pixelRect(
             forLocalRect: selection.localRect,
-            screenSize: capture.screen.frame.size,
+            screenSize: capture.frame.size,
             imageSize: CGSize(width: capture.image.width, height: capture.image.height)
         )
         guard let crop = capture.image.cropping(to: pixelRect) else { return }
-        let globalRect = CoordinateMapper.globalRect(forLocalRect: selection.localRect, screenFrame: capture.screen.frame)
+        let globalRect = CoordinateMapper.globalRect(forLocalRect: selection.localRect, screenFrame: capture.frame)
 
         let started = ContinuousClock.now
-        let pixelsPerPoint = CGFloat(capture.image.width) / capture.screen.frame.width
+        let pixelsPerPoint = CGFloat(capture.image.width) / capture.frame.width
         // The corrected reading takes about 2.4× as long as the quick one, so it starts now and
         // verifies the Shot once it's already on screen (ADR 0002).
         async let correctedLines = TextReader.correctedRead(crop, pixelsPerPoint: pixelsPerPoint)

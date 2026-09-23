@@ -3,55 +3,89 @@ import os
 
 private let logger = Logger(subsystem: "com.peterjournell.slater", category: "shots")
 
-/// Shows each display's frozen Capture full-screen and lets the user drag a box on one of them.
+/// The full-screen selection: a dim layer with a crosshair, on which the user drags a box.
+///
+/// It appears the instant the hotkey is pressed, over the live screen, and is frozen with the
+/// Captures when they land about 80 ms later. The swap is invisible unless something on screen
+/// was moving, and the crosshair never waits for the capture.
 @MainActor
 final class SelectionOverlayController {
     struct Selection: Sendable {
-        /// Index into the captures passed to `select(from:)`.
-        let captureIndex: Int
-        /// The selected box in that capture's screen-local points.
+        let displayID: CGDirectDisplayID
+        /// The selected box in that screen's local points.
         let localRect: CGRect
     }
 
-    private var panels: [KeyablePanel] = []
+    private var panels: [CGDirectDisplayID: KeyablePanel] = [:]
+    private var views: [CGDirectDisplayID: SelectionView] = [:]
     private var continuation: CheckedContinuation<Selection?, Never>?
+    /// A selection made (or cancelled) before `select()` was awaited.
+    private var earlyResult: Selection??
 
-    /// Returns nil when the user cancels with Esc or makes a drag too small to be deliberate.
-    func select(from captures: [DisplayCapture]) async -> Selection? {
-        await withCheckedContinuation { continuation in
-            self.continuation = continuation
-            let started = ContinuousClock.now
-            let mouse = NSEvent.mouseLocation
-            for (index, capture) in captures.enumerated() {
-                let panel = KeyablePanel(contentRect: capture.screen.frame)
-                panel.level = .screenSaver
-                panel.contentView = SelectionView(image: capture.image) { [weak self] rect in
-                    self?.finish(rect.map { Selection(captureIndex: index, localRect: $0) })
-                }
-                panel.setFrame(capture.screen.frame, display: false)
-                panels.append(panel)
-                if capture.screen.frame.contains(mouse) {
-                    panel.makeKeyAndOrderFront(nil)
-                } else {
-                    panel.orderFrontRegardless()
-                }
+    /// Shows the overlay on every screen right away.
+    func show() {
+        let started = ContinuousClock.now
+        earlyResult = nil
+        let mouse = NSEvent.mouseLocation
+        for screen in NSScreen.screens {
+            guard let displayID = screen.displayID else { continue }
+            let panel = KeyablePanel(contentRect: screen.frame)
+            panel.level = .screenSaver
+            panel.backgroundColor = .clear
+            panel.isOpaque = false
+            let view = SelectionView { [weak self] rect in
+                self?.finish(rect.map { Selection(displayID: displayID, localRect: $0) })
             }
-            NSCursor.crosshair.set()
-            let elapsed = ContinuousClock.now - started
-            logger.notice("Selection overlay shown in \(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000) ms")
+            panel.contentView = view
+            panel.setFrame(screen.frame, display: false)
+            panels[displayID] = panel
+            views[displayID] = view
+            if screen.frame.contains(mouse) {
+                panel.makeKeyAndOrderFront(nil)
+            } else {
+                panel.orderFrontRegardless()
+            }
+        }
+        NSCursor.crosshair.set()
+        let elapsed = ContinuousClock.now - started
+        logger.notice("Selection overlay shown in \(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000) ms")
+    }
+
+    /// Replaces the live screen under the dim layer with the frozen Captures.
+    func freeze(with captures: [DisplayCapture]) {
+        for capture in captures {
+            views[capture.displayID]?.image = capture.image
+        }
+    }
+
+    /// Waits for the user's box. Returns nil when they cancel with Esc or make a drag too
+    /// small to be deliberate.
+    func select() async -> Selection? {
+        if let earlyResult {
+            self.earlyResult = nil
+            return earlyResult
+        }
+        return await withCheckedContinuation { continuation in
+            self.continuation = continuation
         }
     }
 
     private func finish(_ selection: Selection?) {
-        panels.forEach { $0.orderOut(nil) }
-        panels = []
+        panels.values.forEach { $0.orderOut(nil) }
+        panels = [:]
+        views = [:]
         NSCursor.arrow.set()
-        continuation?.resume(returning: selection)
-        continuation = nil
+        if let continuation {
+            self.continuation = nil
+            continuation.resume(returning: selection)
+        } else {
+            earlyResult = .some(selection)
+        }
     }
 }
 
-/// The frozen image under a dim layer, with the selected box cut out of the dim.
+/// The dim layer with the selected box cut out of it, over the live screen at first and the
+/// frozen image once it arrives.
 private final class SelectionView: NSView {
     /// Drags smaller than this, in points, count as a cancel.
     private static let minimumSize: CGFloat = 6
@@ -62,11 +96,16 @@ private final class SelectionView: NSView {
     private var dragStart: CGPoint?
     private var selection: CGRect?
 
-    init(image: CGImage, onFinish: @escaping (CGRect?) -> Void) {
+    var image: CGImage? {
+        didSet {
+            layer?.contents = image
+        }
+    }
+
+    init(onFinish: @escaping (CGRect?) -> Void) {
         self.onFinish = onFinish
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.contents = image
         layer?.contentsGravity = .resize
 
         dimLayer.fillColor = NSColor.black.withAlphaComponent(0.35).cgColor
