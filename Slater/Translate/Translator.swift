@@ -46,7 +46,7 @@ final class Translator {
             for try await response in currentSession().translate(batch: requests) {
                 guard let identifier = response.clientIdentifier, let text = textsByIdentifier[identifier] else { continue }
                 for index in indicesByText[text] ?? [] {
-                    shot.translations[index] = response.targetText
+                    shot.translations[index] = Self.tidy(response.targetText, source: text)
                 }
             }
             shot.state = .translated
@@ -54,6 +54,17 @@ final class Translator {
             shot.state = .failed
             await refreshLanguagePack()
         }
+    }
+
+    /// Short labels such as 備考 or 単価 come back as "a note" or "a unit price". An article
+    /// reads oddly on a table header or form label, so drop it and capitalize.
+    nonisolated static func tidy(_ translation: String, source: String) -> String {
+        guard source.count <= 6, !source.contains(where: { "。、！？".contains($0) }) else { return translation }
+        for article in ["a ", "an ", "the "] where translation.lowercased().hasPrefix(article) {
+            let rest = translation.dropFirst(article.count)
+            return rest.prefix(1).uppercased() + rest.dropFirst()
+        }
+        return translation.prefix(1).uppercased() + translation.dropFirst()
     }
 
     private func currentSession() -> TranslationSession {

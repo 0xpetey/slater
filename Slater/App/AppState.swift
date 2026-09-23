@@ -13,7 +13,7 @@ final class AppState {
     @ObservationIgnored private var onboarding: OnboardingWindowController?
     @ObservationIgnored private let selectionOverlay = SelectionOverlayController()
     @ObservationIgnored private var isTakingShot = false
-    @ObservationIgnored private var previews: [CapturePreviewController] = []
+    @ObservationIgnored private var shotWindows: [ShotWindowController] = []
 
     func start() {
         hotkeys = HotkeyManager { [weak self] in self?.takeShot() }
@@ -82,12 +82,11 @@ final class AppState {
             return
         }
 
-        // Milestone 5: open a Shot window. For now, show the temporary preview; D opens the details.
-        let preview = CapturePreviewController(shot: shot) { [weak self] closed in
-            self?.previews.removeAll { $0 === closed }
+        let window = ShotWindowController(shot: shot) { [weak self] closed in
+            self?.shotWindows.removeAll { $0 === closed }
         }
-        previews.append(preview)
-        preview.show()
+        shotWindows.append(window)
+        window.show()
         Task {
             await translator.translate(shot)
             logger.info("Translated \(shot.translations.count) blocks in \(String(describing: ContinuousClock.now - started), privacy: .public)")

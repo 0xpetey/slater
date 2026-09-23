@@ -47,3 +47,17 @@ struct TranslatorTests {
         }
     }
 }
+
+struct TranslationTidyingTests {
+    @Test func shortLabelsLoseTheirArticle() {
+        #expect(Translator.tidy("a note", source: "備考") == "Note")
+        #expect(Translator.tidy("an item number", source: "品番") == "Item number")
+        #expect(Translator.tidy("the person in charge", source: "担当者") == "Person in charge")
+        #expect(Translator.tidy("quantity", source: "数量") == "Quantity")
+    }
+
+    @Test func sentencesAreLeftAlone() {
+        let sentence = "a re-quote is required due to specification changes."
+        #expect(Translator.tidy(sentence, source: "仕様変更のため、再見積もりが必要です。") == sentence)
+    }
+}
