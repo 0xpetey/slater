@@ -21,7 +21,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         guard let button = statusItem.button else { return }
         let lizard = NSImage(systemSymbolName: "lizard.fill", accessibilityDescription: "Slater")?
-            .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+            .withSymbolConfiguration(.init(pointSize: 13.5, weight: .regular))
         lizard?.isTemplate = true
         iconView.image = lizard
         iconView.imageScaling = .scaleNone
