@@ -40,11 +40,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         statusItem.menu = menu
     }
 
-    @objc func mouseEntered(with event: NSEvent) {
+    // AppKit sends the tracking area's owner `mouseEntered:`. Swift would derive
+    // `mouseEnteredWith:` from the label on a non-override, so the selectors are spelled out.
+    @objc(mouseEntered:) func mouseEntered(with event: NSEvent) {
         iconView.addSymbolEffect(.wiggle, options: .nonRepeating)
     }
 
-    @objc func mouseExited(with event: NSEvent) {}
+    @objc(mouseExited:) func mouseExited(with event: NSEvent) {}
 
     /// Rebuilt each time it opens, so the Open Shots list is current.
     func menuNeedsUpdate(_ menu: NSMenu) {
