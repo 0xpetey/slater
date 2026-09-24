@@ -12,3 +12,5 @@ Slater/App/Info.plist
 .agents/
 .claude/
 skills-lock.json
+# Local environment: developer team ID for signing
+mise.local.toml

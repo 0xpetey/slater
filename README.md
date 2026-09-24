@@ -8,6 +8,15 @@ A macOS menu bar app: press a hotkey, drag a box over any Japanese text on scree
 
 Requires macOS 26 and Xcode 26. The Xcode project is generated from `project.yml` by XcodeGen, which is pinned in `mise.toml`.
 
+Signing needs your Apple developer team ID, which isn't committed. Put it in a `mise.local.toml` next to `mise.toml` (git-ignored):
+
+```toml
+[env]
+DEVELOPMENT_TEAM = "XXXXXXXXXX"
+```
+
+Then:
+
 ```sh
 mise install                 # installs xcodegen
 mise exec -- xcodegen generate

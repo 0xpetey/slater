@@ -76,7 +76,7 @@ slater/
 ```
 **Distribution:** version 1 is only for you, but it's set up so it can be shared with coworkers later:
 - Bundle ID `app.slater`. Settle this before milestone 1, because changing it later resets everyone's Screen Recording permission.
-- Local builds use automatic signing with the personal team's Apple Development certificate (team QCXUWE7EEH). To share, switch `project.yml` to the paid team (RQB2E9KNQB) with a Developer ID certificate. Xcode must be signed in to that account first.
+- Local builds use automatic signing with an Apple Development certificate; the team ID comes from a git-ignored `mise.local.toml`. To share, use a paid team with a Developer ID certificate, and sign Xcode in to that account first.
 - Hardened Runtime is on from the start, so Developer ID signing and notarization can be added later without code changes.
 - No App Sandbox. It's not needed outside the App Store.
 - Sharing with coworkers will likely need IT approval for Screen Recording on company-managed Macs.
