@@ -1,5 +1,7 @@
 # Slater
 
+"It's slop, but it is MY slop"
+
 A macOS menu bar app: press a hotkey, drag a box over any Japanese text on screen, and get an in-place English translation. Everything runs on-device. See `plan.md` for the design, `CONTEXT.md` for the glossary and `docs/adr/` for decisions.
 
 ## Build and run
