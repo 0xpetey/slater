@@ -7,11 +7,10 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    # Local builds sign with the personal team's Apple Development certificate.
+    # Xcode manages signing with the personal team's Apple Development certificate.
     # Switch to the paid team (RQB2E9KNQB) and Developer ID when sharing with coworkers.
     DEVELOPMENT_TEAM: QCXUWE7EEH
-    CODE_SIGN_STYLE: Manual
-    CODE_SIGN_IDENTITY: Apple Development
+    CODE_SIGN_STYLE: Automatic
     ENABLE_HARDENED_RUNTIME: YES
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
