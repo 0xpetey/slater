@@ -1,9 +1,5 @@
-// Renders the app icon: a macOS squircle with a green gradient and the white lizard.
+// Renders the app icon: a green macOS squircle with a white circle in it.
 // Run from the repo root: swift scripts/make-icon.swift
-//
-// Note: Apple's SF Symbols license permits the symbols in app UI but not in app icons or
-// logos, so this lizard is fine for a personal build and should be replaced with an original
-// drawing before Slater is distributed.
 import AppKit
 
 let outputDirectory = URL(fileURLWithPath: "Slater/Assets.xcassets/AppIcon.appiconset")
@@ -24,30 +20,15 @@ func renderMaster() -> CGImage {
     // Shadow, as macOS draws under its icons.
     context.saveGState()
     context.setShadow(offset: CGSize(width: 0, height: -canvas * 0.01), blur: canvas * 0.03, color: NSColor.black.withAlphaComponent(0.3).cgColor)
-    NSColor(red: 0.16, green: 0.55, blue: 0.40, alpha: 1).setFill()
+    NSColor(red: 0.18, green: 0.62, blue: 0.43, alpha: 1).setFill()
     squircle.fill()
     context.restoreGState()
 
-    // Gradient: lighter at the top, like a lizard's back in the sun.
-    squircle.addClip()
-    NSGradient(colors: [
-        NSColor(red: 0.40, green: 0.80, blue: 0.58, alpha: 1),
-        NSColor(red: 0.12, green: 0.52, blue: 0.38, alpha: 1),
-    ])!.draw(in: square, angle: -90)
-
-    // The lizard, rendered white by the symbol configuration, filling about 66% of the squircle.
-    let configuration = NSImage.SymbolConfiguration(pointSize: square.width * 0.62, weight: .regular)
-        .applying(.init(paletteColors: [.white]))
-    let symbol = NSImage(systemSymbolName: "lizard.fill", accessibilityDescription: nil)!
-        .withSymbolConfiguration(configuration)!
-    let size = symbol.size
-    let scale = min(square.width * 0.66 / size.width, square.height * 0.66 / size.height)
-    let drawn = CGSize(width: size.width * scale, height: size.height * scale)
-    let origin = CGPoint(x: square.midX - drawn.width / 2, y: square.midY - drawn.height / 2)
-    context.saveGState()
-    context.setShadow(offset: CGSize(width: 0, height: -canvas * 0.006), blur: canvas * 0.012, color: NSColor.black.withAlphaComponent(0.25).cgColor)
-    symbol.draw(in: CGRect(origin: origin, size: drawn))
-    context.restoreGState()
+    // A white circle, centered, half the squircle's width.
+    let diameter = square.width * 0.5
+    let circle = NSBezierPath(ovalIn: CGRect(x: square.midX - diameter / 2, y: square.midY - diameter / 2, width: diameter, height: diameter))
+    NSColor.white.setFill()
+    circle.fill()
 
     NSGraphicsContext.current = nil
     return context.makeImage()!
