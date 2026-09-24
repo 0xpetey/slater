@@ -27,8 +27,13 @@ struct ShotView: View {
     var isExporting = false
     var onSave: () -> Void = {}
     var onSelect: (ShotDisplay) -> Void = { _ in }
+    /// Shows the controls bar without hovering, for previews and snapshots.
+    var alwaysShowsControls = false
     let onClose: () -> Void
     @State private var isHovering = false
+
+    /// How far the bar's shading extends down from the top edge, in points.
+    private static let barHeight: CGFloat = 40
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -48,9 +53,19 @@ struct ShotView: View {
             }
         }
         .frame(width: shot.screenRect.width, height: shot.screenRect.height)
+        .overlay(alignment: .top) {
+            // Shading behind the bar, so its white labels read on a white page.
+            if !isExporting && showsControls {
+                LinearGradient(colors: [.black.opacity(0.65), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: Self.barHeight)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if !isExporting { controls }
         }
+        .animation(.easeInOut(duration: 0.15), value: showsControls)
         .overlay(alignment: .bottomLeading) {
             if state.showsOriginal && !isExporting {
                 Text("Original")
@@ -81,6 +96,10 @@ struct ShotView: View {
         state.showsOriginal ? .original : ShotDisplay(model: shot.displayedModel)
     }
 
+    private var showsControls: Bool {
+        isHovering || alwaysShowsControls
+    }
+
     private var controls: some View {
         HStack(spacing: 4) {
             // Busy until the displayed model's translations are in and the corrected OCR
@@ -92,7 +111,7 @@ struct ShotView: View {
                     .foregroundStyle(.orange)
                     .help("Translation failed")
             }
-            if isHovering {
+            if showsControls {
                 Picker("View", selection: Binding(get: { selection }, set: { onSelect($0) })) {
                     Text("Original").tag(ShotDisplay.original)
                     if translator.status(of: .fast) != .unsupported {
@@ -127,6 +146,8 @@ struct ShotView: View {
             }
         }
         .padding(4)
+        // The bar sits on dark shading, so its controls use their dark-appearance styling.
+        .colorScheme(.dark)
     }
 }
 
