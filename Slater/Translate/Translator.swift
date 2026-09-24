@@ -3,7 +3,7 @@ import Observation
 import os
 @preconcurrency import Translation
 
-private let logger = Logger(subsystem: "com.peterjournell.slater", category: "translation")
+private let logger = Logger(subsystem: "app.slater", category: "translation")
 
 /// Japanese → English, on-device only (ADR 0001).
 @MainActor

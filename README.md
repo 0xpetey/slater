@@ -28,7 +28,7 @@ xcodebuild -project Slater.xcodeproj -scheme Slater -derivedDataPath build/Deriv
 Slater needs Screen Recording permission to read the screen. macOS ties this permission to the app's code signature. If it stops working after a rebuild or a signing change, reset it and grant it again:
 
 ```sh
-tccutil reset ScreenCapture com.peterjournell.slater
+tccutil reset ScreenCapture app.slater
 ```
 
 ## License

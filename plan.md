@@ -75,7 +75,7 @@ slater/
   SlaterTests/  BlockGrouperTests, CoordinateMapperTests, fixture images (web, PDF, spreadsheet, poor scan)
 ```
 **Distribution:** version 1 is only for you, but it's set up so it can be shared with coworkers later:
-- Bundle ID `com.peterjournell.slater`. Settle this before milestone 1, because changing it later resets everyone's Screen Recording permission.
+- Bundle ID `app.slater`. Settle this before milestone 1, because changing it later resets everyone's Screen Recording permission.
 - Local builds use automatic signing with the personal team's Apple Development certificate (team QCXUWE7EEH). To share, switch `project.yml` to the paid team (RQB2E9KNQB) with a Developer ID certificate. Xcode must be signed in to that account first.
 - Hardened Runtime is on from the start, so Developer ID signing and notarization can be added later without code changes.
 - No App Sandbox. It's not needed outside the App Store.
@@ -116,4 +116,4 @@ This Mac is not enrolled in device management (MDM). If your work Mac is a diffe
   - Five Shots open at once: drag, toggle and close each, and check the menu bar list stays in sync.
   - On a second monitor, if you have one.
   - With Screen Recording permission denied, and with the Japanese language pack removed.
-- **Timing check:** the log (`log show --predicate 'subsystem == "com.peterjournell.slater"'`) records, per Shot: capture time after the hotkey, selection overlay time, quick reading and Shot-open time after selection, when the corrected reading was applied and how many Blocks it changed, and translation first-result and total times with the model used. Counts and milliseconds only, never text. Target: Shot open under 0.5 s for a paragraph-sized box, first translation within 1 s.
+- **Timing check:** the log (`log show --predicate 'subsystem == "app.slater"'`) records, per Shot: capture time after the hotkey, selection overlay time, quick reading and Shot-open time after selection, when the corrected reading was applied and how many Blocks it changed, and translation first-result and total times with the model used. Counts and milliseconds only, never text. Target: Shot open under 0.5 s for a paragraph-sized box, first translation within 1 s.

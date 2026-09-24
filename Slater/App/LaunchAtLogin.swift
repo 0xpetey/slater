@@ -1,7 +1,7 @@
 import os
 import ServiceManagement
 
-private let logger = Logger(subsystem: "com.peterjournell.slater", category: "setup")
+private let logger = Logger(subsystem: "app.slater", category: "setup")
 
 /// Opens Slater when the user logs in, so the hotkey always works.
 @MainActor

@@ -2,7 +2,7 @@ import AppKit
 import Observation
 import os
 
-private let logger = Logger(subsystem: "com.peterjournell.slater", category: "shots")
+private let logger = Logger(subsystem: "app.slater", category: "shots")
 
 private func milliseconds(since start: ContinuousClock.Instant) -> Int {
     let elapsed = ContinuousClock.now - start
