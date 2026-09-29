@@ -13,8 +13,9 @@ private func fixture(_ name: String) throws -> CGImage {
 /// Read and group a fixture, as the app does.
 private func blocks(_ name: String, pixelsPerPoint: CGFloat = 2) async throws -> [Block] {
     let image = try fixture(name)
-    let lines = try await TextReader.read(image, pixelsPerPoint: pixelsPerPoint)
-    return BlockGrouper.group(lines, hasRule: RuleDetector(image: image).hasRule)
+    let languages = TextRecognizer.visionLanguages(for: [Locale.Language(identifier: "ja"), Locale.Language(identifier: "en")])
+    let lines = try await TextReader.read(image, pixelsPerPoint: pixelsPerPoint, languages: languages)
+    return BlockGrouper.group(lines, source: .japanese, hasRule: RuleDetector(image: image).hasRule)
 }
 
 /// End-to-end OCR on images rendered by scripts/make-fixtures.swift.
@@ -30,7 +31,7 @@ struct RecognitionTests {
 
     @Test func spreadsheetCellsStaySeparate() async throws {
         let result = try await blocks("table")
-        let japanese = Set(result.filter { $0.kind == .japanese }.map(\.text))
+        let japanese = Set(result.filter { $0.kind == .source }.map(\.text))
         let passthrough = Set(result.filter { $0.kind == .passthrough }.map(\.text))
         #expect(japanese == ["品番", "数量", "単価", "備考", "部品A", "仕様変更のため、再見積もりが必要です。"])
         #expect(passthrough == ["AB-1024", "50", "12", "¥1,200", "¥800", "Rush order"])

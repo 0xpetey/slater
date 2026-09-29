@@ -13,10 +13,10 @@ enum TextRecognizer {
     /// Language correction is the single most expensive step in the pipeline: on a 20-line
     /// crop it takes a pass from about 0.5 s to 1.2 s. It stays on for the corrected reading,
     /// because turning it off caused misreads such as 未 for 末 on blurry scans (ADR 0002).
-    static func recognize(_ image: CGImage, boundsSize: CGSize, languageCorrection: Bool) async throws -> [Line] {
+    static func recognize(_ image: CGImage, boundsSize: CGSize, languageCorrection: Bool, languages: [Locale.Language]) async throws -> [Line] {
         var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
-        request.recognitionLanguages = [Locale.Language(identifier: "ja-JP"), Locale.Language(identifier: "en-US")]
+        request.recognitionLanguages = languages
         request.usesLanguageCorrection = languageCorrection
 
         return try await request.perform(on: image).compactMap { observation in
@@ -51,16 +51,32 @@ enum TextRecognizer {
         character.unicodeScalars.contains { (0x3000...0x9FFF).contains($0.value) || (0xFF00...0xFF60).contains($0.value) }
     }
 
+    /// Vision's own identifiers for these languages (`ja-JP` for `ja`, `zh-TW` for `zh-Hant`),
+    /// leaving out any it can't read.
+    nonisolated static func visionLanguages(for languages: [Locale.Language]) -> [Locale.Language] {
+        let supported = RecognizeTextRequest().supportedRecognitionLanguages
+        var result: [Locale.Language] = []
+        for language in languages {
+            let wanted = Locale.Language(identifier: language.maximalIdentifier)
+            let match = supported.first { candidate in
+                let full = Locale.Language(identifier: candidate.maximalIdentifier)
+                return full.languageCode == wanted.languageCode && full.script == wanted.script
+            } ?? supported.first { $0.languageCode == wanted.languageCode }
+            if let match, !result.contains(match) { result.append(match) }
+        }
+        return result
+    }
+
     /// Loads Vision's recognition models, so the first Shot doesn't pay for it.
-    static func warmUp() async {
+    static func warmUp(languages: [Locale.Language]) async {
         guard let image = await MainActor.run(body: { sampleImage() }) else { return }
         let size = CGSize(width: image.width, height: image.height)
-        async let quick = recognize(image, boundsSize: size, languageCorrection: false)
-        async let corrected = recognize(ImagePreprocessor.prepare(image, pixelsPerPoint: 2), boundsSize: size, languageCorrection: true)
+        async let quick = recognize(image, boundsSize: size, languageCorrection: false, languages: languages)
+        async let corrected = recognize(ImagePreprocessor.prepare(image, pixelsPerPoint: 2), boundsSize: size, languageCorrection: true, languages: languages)
         _ = try? await (quick, corrected)
     }
 
-    /// A small image with a word of Japanese in it, so the warm-up exercises the real models.
+    /// A small image with a few characters in it, so the warm-up exercises the real models.
     @MainActor
     private static func sampleImage() -> CGImage? {
         let size = CGSize(width: 120, height: 40)
@@ -71,7 +87,7 @@ enum TextRecognizer {
         context.setFillColor(.white)
         context.fill(CGRect(origin: .zero, size: size))
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        ("準備中" as NSString).draw(at: CGPoint(x: 8, y: 8), withAttributes: [.font: NSFont.systemFont(ofSize: 20), .foregroundColor: NSColor.black])
+        ("Ab 準備" as NSString).draw(at: CGPoint(x: 8, y: 8), withAttributes: [.font: NSFont.systemFont(ofSize: 20), .foregroundColor: NSColor.black])
         NSGraphicsContext.current = nil
         return context.makeImage()
     }

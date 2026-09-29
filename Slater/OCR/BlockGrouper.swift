@@ -2,7 +2,8 @@ import CoreGraphics
 
 /// Merges Lines into Blocks. Lines merge only when stacked: side-by-side text such as
 /// table cells, form fields and columns always stays in separate Blocks. Stacked Lines also
-/// stay apart when a rule is drawn between them (table rows) or only one of them is Japanese.
+/// stay apart when a rule is drawn between them (table rows) or only one of them is in the
+/// source language.
 /// Vertical writing is the same turned on its side: a column continues in the one to its left.
 enum BlockGrouper {
     /// Largest gap between Lines that continue one another, as a fraction of line height (or
@@ -12,11 +13,12 @@ enum BlockGrouper {
     /// the boxes of a slightly skewed scan, where a long line's box is taller than a short one's.
     static let heightRatioRange: ClosedRange<CGFloat> = 0.55...1.8
     /// A Line ending in one of these closes its Block, even if the next Line is close.
-    static let sentenceEndings: Set<Character> = ["。", "！", "？"]
+    static let sentenceEndings: Set<Character> = ["。", "！", "？", ".", "!", "?"]
 
-    /// `hasRule` reports whether a gap between two Lines, in the crop's pixels, contains a
-    /// rule across it. Use `RuleDetector` for real captures.
-    static func group(_ lines: [Line], hasRule: (CGRect) -> Bool = { _ in false }) -> [Block] {
+    /// `source` decides which Blocks are translated. `hasRule` reports whether a gap between
+    /// two Lines, in the crop's pixels, contains a rule across it; use `RuleDetector` for
+    /// real captures.
+    static func group(_ lines: [Line], source: SourceScript, hasRule: (CGRect) -> Bool = { _ in false }) -> [Block] {
         var blocks: [Block] = []
         // Visit Lines in reading order, so each one can only continue a Block that came before it:
         // top to bottom for horizontal writing, right to left for vertical columns.
@@ -25,12 +27,12 @@ enum BlockGrouper {
             return (a.bounds.minY, a.bounds.minX) < (b.bounds.minY, b.bounds.minX)
         }
         for line in ordered {
-            let candidates = blocks.indices.filter { continues(blocks[$0], with: line, hasRule: hasRule) }
+            let candidates = blocks.indices.filter { continues(blocks[$0], with: line, source: source, hasRule: hasRule) }
             // If several Blocks could continue, the closest one wins.
             if let index = candidates.min(by: { gap(blocks[$0], line) < gap(blocks[$1], line) }) {
                 blocks[index].lines.append(line)
             } else {
-                blocks.append(Block(lines: [line]))
+                blocks.append(Block(lines: [line], source: source))
             }
         }
         return readingOrder(blocks)
@@ -55,10 +57,10 @@ enum BlockGrouper {
         return rows.flatMap { $0.sorted { $0.bounds.minX < $1.bounds.minX } }
     }
 
-    private static func continues(_ block: Block, with line: Line, hasRule: (CGRect) -> Bool) -> Bool {
+    private static func continues(_ block: Block, with line: Line, source: SourceScript, hasRule: (CGRect) -> Bool) -> Bool {
         guard let last = block.lines.last else { return false }
         if let ending = last.text.last, sentenceEndings.contains(ending) { return false }
-        if Block.containsJapanese(last.text) != Block.containsJapanese(line.text) { return false }
+        if source.contains(last.text) != source.contains(line.text) { return false }
         guard last.isVertical == line.isVertical else { return false }
         return last.isVertical ? continuesColumn(last, line, hasRule: hasRule) : continuesRow(last, line, hasRule: hasRule)
     }

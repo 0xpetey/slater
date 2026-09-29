@@ -37,7 +37,7 @@ struct OnboardingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Slater translates the Japanese text in any part of your screen. Everything stays on this Mac.")
+            Text("Slater translates the text in any part of your screen. Everything stays on this Mac.")
                 .fixedSize(horizontal: false, vertical: true)
 
             GroupBox {
@@ -65,63 +65,24 @@ struct OnboardingView: View {
                 .padding(4)
             }
 
-            // The Fast model is what Slater translates with (ADR 0003), so it's required.
             GroupBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    switch translator.fastModel {
-                    case .checking:
-                        Label("Checking the translation model…", systemImage: "hourglass")
-                    case .installed:
-                        Label("Translation model installed", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    case .needsDownload:
-                        Label("Translation model needed", systemImage: "exclamationmark.circle.fill")
-                            .foregroundStyle(.orange)
-                        Text("Translation runs on this Mac, so macOS needs to download its Japanese ↔ English model once.")
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button("Download…") { fastDownload = Translator.Model.fast.downloadConfiguration }
-                    case .unsupported:
-                        Label("Japanese to English isn't available on this Mac", systemImage: "xmark.circle.fill")
-                            .foregroundStyle(.red)
-                    }
+                    LanguagePickers(translator: translator)
+                    Divider()
+                    ModelStatusRows(translator: translator, fastDownload: $fastDownload, accurateDownload: $accurateDownload)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(4)
             }
-            // Asks macOS to download the model, showing its own confirmation dialog.
+            // Asks macOS to download a model, showing its own confirmation dialog.
             .translationTask(fastDownload) { session in
                 try? await session.prepareTranslation()
-                await translator.refreshModels()
+                await translator.refresh()
                 translator.warmUp()
-            }
-
-            // The Accurate model is optional: slower, sometimes better wording.
-            GroupBox {
-                VStack(alignment: .leading, spacing: 10) {
-                    switch translator.accurateModel {
-                    case .checking:
-                        Label("Checking the Accurate model…", systemImage: "hourglass")
-                    case .installed:
-                        Label("Accurate model installed (optional)", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    case .needsDownload:
-                        Label("Accurate model (optional)", systemImage: "arrow.down.circle")
-                        Text("A larger model that's slower but sometimes words things better. You can translate any Shot again with it, or make it the default in Settings.")
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button("Also download…") { accurateDownload = Translator.Model.accurate.downloadConfiguration }
-                    case .unsupported:
-                        Label("The Accurate model isn't available on this Mac", systemImage: "minus.circle")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(4)
             }
             .translationTask(accurateDownload) { session in
                 try? await session.prepareTranslation()
-                await translator.refreshModels()
+                await translator.refresh()
             }
 
             if let shortcut = KeyboardShortcuts.getShortcut(for: .takeShot) {
@@ -143,13 +104,86 @@ struct OnboardingView: View {
             }
         }
         .padding(20)
-        .frame(width: 440)
+        .frame(width: 460)
         .task {
             // Picks up the grant if macOS reports it without a restart.
             while !Task.isCancelled && !permissions.hasScreenRecording {
                 try? await Task.sleep(for: .seconds(1))
                 permissions.refresh()
             }
+        }
+    }
+}
+
+/// "Translate from [Japanese] to [English]". Sources are the languages Vision can read.
+struct LanguagePickers: View {
+    let translator: Translator
+
+    var body: some View {
+        HStack {
+            Text("Translate from")
+            Picker("Translate from", selection: Binding(get: { translator.source }, set: { translator.setLanguages(source: $0, target: translator.target) })) {
+                ForEach(translator.readableLanguages, id: \.minimalIdentifier) { language in
+                    Text(Translator.name(of: language)).tag(language)
+                }
+            }
+            .labelsHidden()
+            Text("to")
+            Picker("to", selection: Binding(get: { translator.target }, set: { translator.setLanguages(source: translator.source, target: $0) })) {
+                ForEach(translator.supportedLanguages, id: \.minimalIdentifier) { language in
+                    Text(Translator.name(of: language)).tag(language)
+                }
+            }
+            .labelsHidden()
+        }
+        .disabled(translator.supportedLanguages.isEmpty)
+    }
+}
+
+/// The Fast model (required) and the Accurate model (optional) for the chosen pair (ADR 0003).
+struct ModelStatusRows: View {
+    let translator: Translator
+    @Binding var fastDownload: TranslationSession.Configuration?
+    @Binding var accurateDownload: TranslationSession.Configuration?
+
+    private var pair: String {
+        "\(Translator.name(of: translator.source)) → \(Translator.name(of: translator.target))"
+    }
+
+    var body: some View {
+        switch translator.fastModel {
+        case .checking:
+            Label("Checking the translation model…", systemImage: "hourglass")
+        case .installed:
+            Label("\(pair) model installed", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .needsDownload:
+            Label("\(pair) model needed", systemImage: "exclamationmark.circle.fill")
+                .foregroundStyle(.orange)
+            Text("Translation runs on this Mac, so macOS needs to download the model for this pair once.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Download…") { fastDownload = translator.downloadConfiguration(for: .fast) }
+        case .unsupported:
+            Label("\(pair) isn't available on this Mac", systemImage: "xmark.circle.fill")
+                .foregroundStyle(.red)
+        }
+
+        switch translator.accurateModel {
+        case .checking:
+            EmptyView()
+        case .installed:
+            Label("Accurate model installed (optional)", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .needsDownload:
+            Label("Accurate model (optional)", systemImage: "arrow.down.circle")
+            Text("A larger model that's slower but sometimes words things better. You can translate any Shot again with it, or make it the default in Settings.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Also download…") { accurateDownload = translator.downloadConfiguration(for: .accurate) }
+        case .unsupported:
+            Label("The Accurate model isn't available for this pair", systemImage: "minus.circle")
+                .foregroundStyle(.secondary)
         }
     }
 }

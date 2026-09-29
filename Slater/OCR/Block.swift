@@ -4,17 +4,28 @@ import CoreGraphics
 /// horizontal writing, side by side from right to left for vertical writing.
 struct Block: Equatable, Sendable {
     enum Kind: Equatable, Sendable {
-        /// Contains Japanese, so it's translated.
-        case japanese
-        /// No Japanese (numbers, part codes, English), so it's shown exactly as captured.
+        /// Contains the source language's script, so it's translated.
+        case source
+        /// None of it (numbers, part codes, text already in another language), so it's shown
+        /// exactly as captured.
         case passthrough
     }
 
     var lines: [Line]
+    let kind: Kind
+
+    init(lines: [Line], kind: Kind) {
+        self.lines = lines
+        self.kind = kind
+    }
+
+    /// Classified by whether any character is in the source language's script.
+    init(lines: [Line], source: SourceScript) {
+        self.lines = lines
+        kind = source.contains(lines.map(\.text).joined()) ? .source : .passthrough
+    }
 
     var isVertical: Bool { lines[0].isVertical }
-
-    var kind: Kind { Self.containsJapanese(text) ? .japanese : .passthrough }
 
     /// OCR may have misread part of this Block, so its translation should be checked (ADR 0002).
     var isLowConfidence: Bool { lines.contains(where: \.isLowConfidence) }
@@ -30,10 +41,6 @@ struct Block: Equatable, Sendable {
                 && line.text.first.map(Self.isLatinWordCharacter) == true
             return joined + (needsSpace ? " " : "") + line.text
         }
-    }
-
-    static func containsJapanese(_ text: String) -> Bool {
-        text.contains(/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/)
     }
 
     private static func isLatinWordCharacter(_ character: Character) -> Bool {

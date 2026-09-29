@@ -1,6 +1,6 @@
 # Slater
 
-A macOS utility that translates the Japanese text inside a box the user draws on the screen, entirely on-device.
+A macOS utility that translates the text inside a box the user draws on the screen, from a chosen source language into a chosen target language, entirely on-device.
 
 ## Language
 
@@ -20,13 +20,22 @@ _Avoid_: Observation, row
 One or more Lines that continue one another and read as one unit, such as a paragraph or a wrapped cell, and are translated together. In horizontal writing the Lines are stacked; in vertical writing they are columns running right to left. A Block never joins text across the direction of writing, so separate table cells, form labels and page columns are always separate Blocks.
 _Avoid_: Paragraph, chunk, region
 
-**Japanese Block**:
-A Block that contains at least one hiragana, katakana or kanji character. Only Japanese Blocks are translated, and the whole Block is translated, including any English or numbers mixed into it.
+**Source language**:
+The language the user has chosen to read off the screen (Japanese by default). It must be one macOS can translate on-device and Vision can read.
+_Avoid_: Input language, from-language
+
+**Target language**:
+The language translations are written in (the Mac's language by default, or English).
+_Avoid_: Output language, to-language
+
+**Source Block**:
+A Block that contains at least one character of the source language's script (for Japanese: hiragana, katakana or kanji). Only Source Blocks are translated, and the whole Block is translated, including any numbers or target-language words mixed into it.
+_Avoid_: Japanese Block, translatable block
 
 **Low-confidence Block**:
-A Japanese Block that OCR may have misread. It is still translated, but it's marked so the user knows to check the translation against the original.
+A Source Block that OCR may have misread. It is still translated, but it's marked so the user knows to check the translation against the original.
 _Avoid_: Uncertain block, bad OCR
 
 **Passthrough Block**:
-A Block with no Japanese characters, such as a part number, an amount or English text. It is shown exactly as it was captured and is never translated.
+A Block with no characters of the source language's script, such as a part number, an amount or text already in the target language. It is shown exactly as it was captured and is never translated.
 _Avoid_: Skipped block, ignored text

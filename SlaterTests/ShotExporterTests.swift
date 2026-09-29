@@ -36,9 +36,9 @@ struct ShotExporterTests {
 
     @Test func markdownQuotesTheJapaneseAndFlagsLowConfidence() {
         let blocks = [
-            Block(lines: [Line(text: "品番", bounds: CGRect(x: 0, y: 0, width: 10, height: 10))]),
-            Block(lines: [Line(text: "AB-1024", bounds: CGRect(x: 0, y: 20, width: 10, height: 10))]),
-            Block(lines: [Line(text: "担当者", bounds: CGRect(x: 0, y: 40, width: 10, height: 10), isLowConfidence: true)]),
+            Block(lines: [Line(text: "品番", bounds: CGRect(x: 0, y: 0, width: 10, height: 10))], source: .japanese),
+            Block(lines: [Line(text: "AB-1024", bounds: CGRect(x: 0, y: 20, width: 10, height: 10))], source: .japanese),
+            Block(lines: [Line(text: "担当者", bounds: CGRect(x: 0, y: 40, width: 10, height: 10), isLowConfidence: true)], source: .japanese),
         ]
         let shot = Shot(image: image, screenRect: .zero, blocks: blocks)
         shot.setTranslation("Item number", for: "品番", model: .fast)

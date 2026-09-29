@@ -34,6 +34,9 @@ final class Shot {
     let image: CGImage
     /// Where the box was, in global AppKit points.
     let screenRect: CGRect
+    /// The languages this Shot was read and translated in; Settings may change later.
+    let source: Locale.Language
+    let target: Locale.Language
     let createdAt = Date.now
     private(set) var blocks: [Block] = []
     private(set) var patches: [Patch] = []
@@ -49,17 +52,25 @@ final class Shot {
     var isVerified = false
     private let sampler: ColorSampler
 
-    init(image: CGImage, screenRect: CGRect, blocks: [Block]) {
+    init(
+        image: CGImage, screenRect: CGRect, blocks: [Block],
+        source: Locale.Language = Locale.Language(identifier: "ja"), target: Locale.Language = Locale.Language(identifier: "en")
+    ) {
         self.image = image
         self.screenRect = screenRect
+        self.source = source
+        self.target = target
         sampler = ColorSampler(image: image)
         update(blocks: blocks)
     }
 
+    var sourceName: String { Translator.name(of: source) }
+    var targetName: String { Translator.name(of: target) }
+
     /// Replaces the Blocks, keeping the translations of texts that are still present.
     func update(blocks newBlocks: [Block]) {
         blocks = newBlocks
-        let texts = Set(japaneseBlockIndices.map { blocks[$0].text })
+        let texts = Set(sourceBlockIndices.map { blocks[$0].text })
         slots = slots.filter { texts.contains($0.key) }
         for text in texts where slots[text] == nil {
             slots[text] = TranslationSlot(source: text)
@@ -69,7 +80,7 @@ final class Shot {
         }
         patches = ShotLayout.patches(
             for: blocks,
-            indices: japaneseBlockIndices,
+            indices: sourceBlockIndices,
             pointsPerPixel: screenRect.width / CGFloat(image.width),
             windowSize: screenRect.size,
             background: sampler.background(around:),
@@ -77,8 +88,9 @@ final class Shot {
         )
     }
 
-    var japaneseBlockIndices: [Int] {
-        blocks.indices.filter { blocks[$0].kind == .japanese }
+    /// The Blocks written in the source language, which get translated.
+    var sourceBlockIndices: [Int] {
+        blocks.indices.filter { blocks[$0].kind == .source }
     }
 
     func slot(for blockIndex: Int) -> TranslationSlot? {
@@ -106,22 +118,22 @@ final class Shot {
         slot(for: blockIndex)?.text(for: model ?? displayedModel)
     }
 
-    /// The displayed model's English for each translated Japanese Block, keyed by index into `blocks`.
+    /// The displayed model's translation for each translated source Block, keyed by index into `blocks`.
     var translations: [Int: String] {
-        Dictionary(uniqueKeysWithValues: japaneseBlockIndices.compactMap { index in
+        Dictionary(uniqueKeysWithValues: sourceBlockIndices.compactMap { index in
             translation(for: index).map { (index, $0) }
         })
     }
 
     /// Every translation, one Block per line, for pasting into an email or reply.
-    var englishText: String {
-        japaneseBlockIndices.compactMap { translations[$0] }.joined(separator: "\n")
+    var translatedText: String {
+        sourceBlockIndices.compactMap { translations[$0] }.joined(separator: "\n")
     }
 
     /// A short line for the menu bar's Open Shots list: the start of the first translation,
-    /// or of the Japanese while it's still translating.
+    /// or of the original while it's still translating.
     var summary: String {
-        guard let first = japaneseBlockIndices.first else { return "" }
+        guard let first = sourceBlockIndices.first else { return "" }
         let text = translations[first] ?? blocks[first].text
         return text.count > 40 ? text.prefix(40) + "…" : text
     }
@@ -134,10 +146,10 @@ final class Shot {
         ))
     }
 
-    /// The saved text file: each Japanese Block quoted, then its translation.
+    /// The saved text file: each source Block quoted, then its translation.
     func markdown(title: String) -> String {
         let translations = translations
-        let entries = japaneseBlockIndices.map { index in
+        let entries = sourceBlockIndices.map { index in
             let block = blocks[index]
             let warning = block.isLowConfidence ? " ⚠️ Low OCR confidence: check against the original image" : ""
             return "> \(block.text)\(warning)\n\n\(translations[index] ?? "_Not translated_")"
@@ -145,10 +157,10 @@ final class Shot {
         return (["# \(title)"] + entries).joined(separator: "\n\n") + "\n"
     }
 
-    /// Each Japanese Block followed by its translation, for quoting or asking a colleague to check.
+    /// Each source Block followed by its translation, for quoting or asking a colleague to check.
     var bilingualText: String {
         let translations = translations
-        return japaneseBlockIndices.map { index in
+        return sourceBlockIndices.map { index in
             [blocks[index].text, translations[index]].compactMap { $0 }.joined(separator: "\n")
         }
         .joined(separator: "\n\n")

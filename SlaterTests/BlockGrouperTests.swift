@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import Slater
 
@@ -11,7 +12,7 @@ struct BlockGrouperTests {
         let blocks = BlockGrouper.group([
             line("来週の会議は、仕様変更の影響を確認するため", x: 30, y: 28, width: 590),
             line("に延期されました。", x: 32, y: 68, width: 240),
-        ])
+        ], source: .japanese)
         #expect(blocks.map(\.text) == ["来週の会議は、仕様変更の影響を確認するために延期されました。"])
     }
 
@@ -20,7 +21,7 @@ struct BlockGrouperTests {
             line("品番", x: 30, y: 28, width: 56),
             line("数量", x: 230, y: 28, width: 56),
             line("単価", x: 350, y: 28, width: 56),
-        ])
+        ], source: .japanese)
         #expect(blocks.map(\.text) == ["品番", "数量", "単価"])
     }
 
@@ -32,20 +33,20 @@ struct BlockGrouperTests {
             line("仕様変更のため、", x: 532, y: 130, width: 199),
             line("再見積もりが必要です。", x: 532, y: 166, width: 274),
             line("12", x: 228, y: 132, width: 42),
-        ])
+        ], source: .japanese)
         #expect(Set(blocks.map(\.text)) == ["備考", "12", "仕様変更のため、再見積もりが必要です。"])
     }
 
     @Test func ruleBetweenRowsKeepsThemApart() {
         let blocks = BlockGrouper.group(
             [line("担当者", x: 10, y: 10, width: 90), line("田中", x: 10, y: 45, width: 60)],
-            hasRule: { _ in true }
+            source: .japanese, hasRule: { _ in true }
         )
         #expect(blocks.count == 2)
     }
 
     @Test func japaneseAndPassthroughLinesDoNotMerge() {
-        let blocks = BlockGrouper.group([line("数量", x: 10, y: 10, width: 56), line("50", x: 10, y: 45, width: 42)])
+        let blocks = BlockGrouper.group([line("数量", x: 10, y: 10, width: 56), line("50", x: 10, y: 45, width: 42)], source: .japanese)
         #expect(blocks.count == 2)
     }
 
@@ -56,7 +57,7 @@ struct BlockGrouperTests {
             line("備考", x: 530, y: 27, width: 56),
             line("単価", x: 350, y: 31, width: 56),
             line("部品A", x: 30, y: 132, width: 78),
-        ])
+        ], source: .japanese)
         #expect(blocks.map(\.text) == ["品番", "数量", "単価", "備考", "部品A"])
     }
 
@@ -64,7 +65,7 @@ struct BlockGrouperTests {
         let blocks = BlockGrouper.group([
             line("資料を確認しました。", x: 10, y: 10),
             line("問題ありません。", x: 10, y: 45),
-        ])
+        ], source: .japanese)
         #expect(blocks.count == 2)
     }
 
@@ -72,7 +73,7 @@ struct BlockGrouperTests {
         let blocks = BlockGrouper.group([
             line("会議のお知らせ", x: 10, y: 10, height: 60),
             line("来週の会議は延期されました", x: 10, y: 75, height: 30),
-        ])
+        ], source: .japanese)
         #expect(blocks.count == 2)
     }
 
@@ -80,7 +81,7 @@ struct BlockGrouperTests {
         let blocks = BlockGrouper.group([
             line("Please confirm the", x: 10, y: 10),
             line("delivery date", x: 10, y: 45),
-        ])
+        ], source: .japanese)
         #expect(blocks.map(\.text) == ["Please confirm the delivery date"])
     }
 }
@@ -102,13 +103,13 @@ struct VerticalWritingTests {
             column("本契約の内容は、両当事者の", x: 216),
             column("納期は十月十五日です。", x: 72, height: 340),
             column("書面による合意なしに変更", x: 168, height: 380),
-        ])
+        ], source: .japanese)
         #expect(blocks.map(\.text) == ["本契約の内容は、両当事者の書面による合意なしに変更できないものとする。", "納期は十月十五日です。"])
         #expect(blocks.allSatisfy { $0.isVertical })
     }
 
     @Test func ruleBetweenColumnsKeepsThemApart() {
-        let blocks = BlockGrouper.group([column("担当者の", x: 100), column("確認", x: 50)], hasRule: { _ in true })
+        let blocks = BlockGrouper.group([column("担当者の", x: 100), column("確認", x: 50)], source: .japanese, hasRule: { _ in true })
         #expect(blocks.count == 2)
     }
 
@@ -116,7 +117,7 @@ struct VerticalWritingTests {
         let blocks = BlockGrouper.group([
             column("本契約の内容は", x: 100, y: 40),
             Line(text: "見出しの文章", bounds: CGRect(x: 60, y: 0, width: 120, height: 30)),
-        ])
+        ], source: .japanese)
         #expect(blocks.count == 2)
     }
 }
@@ -124,11 +125,21 @@ struct VerticalWritingTests {
 struct BlockKindTests {
     @Test(arguments: ["品番", "部品A", "AB-1024の在庫", "カタカナ", "ひらがな", "日々"])
     func japaneseTextIsTranslated(_ text: String) {
-        #expect(Block(lines: [line(text, x: 0, y: 0)]).kind == .japanese)
+        #expect(Block(lines: [line(text, x: 0, y: 0)], source: .japanese).kind == .source)
     }
 
     @Test(arguments: ["AB-1024", "50", "¥1,200", "Rush order", "10/15", "—"])
     func textWithoutJapaneseIsPassthrough(_ text: String) {
-        #expect(Block(lines: [line(text, x: 0, y: 0)]).kind == .passthrough)
+        #expect(Block(lines: [line(text, x: 0, y: 0)], source: .japanese).kind == .passthrough)
+    }
+
+    @Test func otherSourceLanguagesUseTheirOwnScripts() {
+        let korean = SourceScript(language: Locale.Language(identifier: "ko"))
+        #expect(korean.contains("담당자") && !korean.contains("AB-1024") && !korean.contains("ひらがな"))
+        let chinese = SourceScript(language: Locale.Language(identifier: "zh-Hant"))
+        #expect(chinese.contains("負責人") && !chinese.contains("Rush order"))
+        let german = SourceScript(language: Locale.Language(identifier: "de"))
+        #expect(german.contains("Lieferdatum") && !german.contains("¥1,200") && !german.contains("担当者"))
+        #expect(!korean.canBeVertical == false && !german.canBeVertical)
     }
 }

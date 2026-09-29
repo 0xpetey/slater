@@ -1,9 +1,9 @@
 import AppKit
 import CoreText
 
-/// One PDF for a Shot: the translated view, the original, and the Japanese ↔ English text.
-/// Both images carry an invisible text layer, so the English is selectable and searchable over
-/// the translated page and the Japanese over the original, as in a scanned, OCR'd document.
+/// One PDF for a Shot: the translated view, the original, and the text in both languages.
+/// Both images carry an invisible text layer, so the translation is selectable and searchable
+/// over the translated page and the original text over the original, as in an OCR'd scan.
 @MainActor
 enum ShotPDF {
     /// US Letter, in points.
@@ -23,7 +23,7 @@ enum ShotPDF {
         let pointsPerPixel = shot.screenRect.width / CGFloat(shot.image.width)
         let translations = shot.translations
 
-        // Page 1: the translation as shown, with the English selectable over each patch.
+        // Page 1: the translation as shown, with the translated text selectable over each patch.
         imagePage(context, title: title, subtitle: "Translated with the \(shot.displayedModel.title) model", image: translatedImage) { drawnWidth, origin in
             let scale = drawnWidth / shot.screenRect.width
             for patch in shot.patches {
@@ -32,10 +32,10 @@ enum ShotPDF {
             }
         }
 
-        // Page 2: the original, with the Japanese selectable over each Block.
+        // Page 2: the original, with the source text selectable over each Block.
         imagePage(context, title: title, subtitle: "Original", image: shot.image) { drawnWidth, origin in
             let scale = drawnWidth / shot.screenRect.width
-            for index in shot.japaneseBlockIndices {
+            for index in shot.sourceBlockIndices {
                 let bounds = shot.blocks[index].bounds
                 let frame = CGRect(x: bounds.minX * pointsPerPixel, y: bounds.minY * pointsPerPixel, width: bounds.width * pointsPerPixel, height: bounds.height * pointsPerPixel)
                 invisibleText(shot.blocks[index].text, in: frame, scale: scale, origin: origin, imageHeight: shot.screenRect.height, context: context)
@@ -43,7 +43,7 @@ enum ShotPDF {
         }
 
         // Pages 3 and on: the text, flowing across as many pages as it needs.
-        textPages(context, title: title, text: textBody(shot: shot, translations: translations))
+        textPages(context, title: title, subtitle: "\(shot.sourceName) and \(shot.targetName)", text: textBody(shot: shot, translations: translations))
 
         context.closePDF()
         return data as Data
@@ -88,12 +88,12 @@ enum ShotPDF {
         context.restoreGState()
     }
 
-    /// Japanese, then English, for every Japanese Block.
+    /// The original, then its translation, for every source Block.
     private static func textBody(shot: Shot, translations: [Int: String]) -> NSAttributedString {
         let body = NSMutableAttributedString()
         let paragraph = NSMutableParagraphStyle()
         paragraph.paragraphSpacing = 4
-        for index in shot.japaneseBlockIndices {
+        for index in shot.sourceBlockIndices {
             let block = shot.blocks[index]
             if block.isLowConfidence {
                 body.append(NSAttributedString(string: "⚠︎ Low OCR confidence: check against the original\n", attributes: [.font: bodyFont, .foregroundColor: NSColor.orange, .paragraphStyle: paragraph]))
@@ -106,12 +106,12 @@ enum ShotPDF {
         return body
     }
 
-    private static func textPages(_ context: CGContext, title: String, text: NSAttributedString) {
+    private static func textPages(_ context: CGContext, title: String, subtitle: String, text: NSAttributedString) {
         let framesetter = CTFramesetterCreateWithAttributedString(text)
         var start = 0
         repeat {
             context.beginPDFPage(nil)
-            let headingBottom = drawHeading(context, title: title, subtitle: "Japanese and English")
+            let headingBottom = drawHeading(context, title: title, subtitle: subtitle)
             let path = CGPath(rect: CGRect(x: margin, y: margin, width: pageSize.width - 2 * margin, height: headingBottom - 12 - margin), transform: nil)
             let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: start, length: 0), path, nil)
             context.textMatrix = .identity

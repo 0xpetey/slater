@@ -71,7 +71,7 @@ final class ShotWindowController: Identifiable {
         case .needsDownload:
             NSApp.activate()
             viewState.downloadModel = model
-            viewState.downloadConfiguration = model.downloadConfiguration
+            viewState.downloadConfiguration = translator.downloadConfiguration(for: model)
         case .checking, .unsupported:
             break
         }

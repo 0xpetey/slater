@@ -85,7 +85,7 @@ struct ShotView: View {
             let model = state.downloadModel
             state.downloadConfiguration = nil
             state.downloadModel = nil
-            await translator.refreshModels()
+            await translator.refresh()
             if let model, translator.status(of: model) == .installed {
                 onSelect(ShotDisplay(model: model))
             }

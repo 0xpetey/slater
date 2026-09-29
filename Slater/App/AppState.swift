@@ -29,15 +29,15 @@ final class AppState {
     func start() {
         hotkeys = HotkeyManager { [weak self] in self?.takeShot() }
         Task {
-            await translator.refreshModels()
+            await translator.refresh()
             if !isReady {
                 showOnboarding()
             }
             // A cold translation model took about 8 s to load on the first Shot after a launch;
             // loading it now means the first Shot only pays the usual per-text time.
             translator.warmUp()
+            await TextRecognizer.warmUp(languages: translator.recognitionLanguages)
         }
-        Task { await TextRecognizer.warmUp() }
         ScreenCapturer.warmUp()
         // macOS may unload the models while the Mac sleeps.
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -106,28 +106,30 @@ final class AppState {
 
         let started = ContinuousClock.now
         let pixelsPerPoint = CGFloat(capture.image.width) / capture.frame.width
+        let languages = translator.recognitionLanguages
+        let script = translator.sourceScript
         // The corrected reading takes about 2.4× as long as the quick one, so it starts now and
         // verifies the Shot once it's already on screen (ADR 0002).
-        async let correctedLines = TextReader.correctedRead(crop, pixelsPerPoint: pixelsPerPoint)
-        let quickLines = try await TextReader.quickRead(crop)
+        async let correctedLines = TextReader.correctedRead(crop, pixelsPerPoint: pixelsPerPoint, languages: languages)
+        let quickLines = try await TextReader.quickRead(crop, languages: languages)
         let quickTime = milliseconds(since: started)
         let rules = RuleDetector(image: crop)
-        var blocks = BlockGrouper.group(quickLines, hasRule: rules.hasRule)
+        var blocks = BlockGrouper.group(quickLines, source: script, hasRule: rules.hasRule)
         var isVerified = false
 
-        if !blocks.contains(where: { $0.kind == .japanese }) {
+        if !blocks.contains(where: { $0.kind == .source }) {
             // Rare: the quick reading may have missed faint text, so wait for the corrected one
             // before deciding there's nothing to translate.
-            blocks = BlockGrouper.group(TextReader.reconcile(quick: quickLines, corrected: try await correctedLines), hasRule: rules.hasRule)
+            blocks = BlockGrouper.group(TextReader.reconcile(quick: quickLines, corrected: try await correctedLines), source: script, hasRule: rules.hasRule)
             isVerified = true
-            guard blocks.contains(where: { $0.kind == .japanese }) else {
-                logger.notice("No Japanese text found \(milliseconds(since: started)) ms after selection")
-                NoticePanel.show("No Japanese text found")
+            guard blocks.contains(where: { $0.kind == .source }) else {
+                logger.notice("No source text found \(milliseconds(since: started)) ms after selection")
+                NoticePanel.show("No \(Translator.name(of: translator.source)) text found")
                 return
             }
         }
 
-        let shot = Shot(image: crop, screenRect: globalRect, blocks: blocks)
+        let shot = Shot(image: crop, screenRect: globalRect, blocks: blocks, source: translator.source, target: translator.target)
         shot.isVerified = isVerified
         shot.displayedModel = translator.activeModel
         shots.open(shot)
@@ -135,7 +137,7 @@ final class AppState {
         logger.notice("""
             Quick reading of \(crop.width)×\(crop.height) px: \(quickLines.count) lines \
             (\(quickLines.count { $0.isVertical }) vertical) in \(quickTime) ms; Shot open \(milliseconds(since: started)) ms \
-            after selection with \(blocks.count) blocks (\(blocks.count { $0.kind == .japanese }) Japanese, \
+            after selection with \(blocks.count) blocks (\(blocks.count { $0.kind == .source }) to translate, \
             longest \(blocks.map(\.text.count).max() ?? 0) characters)
             """)
         #if DEBUG
@@ -148,7 +150,7 @@ final class AppState {
 
         do {
             let lines = TextReader.reconcile(quick: quickLines, corrected: try await correctedLines)
-            let correctedBlocks = BlockGrouper.group(lines, hasRule: rules.hasRule)
+            let correctedBlocks = BlockGrouper.group(lines, source: script, hasRule: rules.hasRule)
             let quickTexts = Set(blocks.map(\.text))
             let changed = correctedBlocks.count { !quickTexts.contains($0.text) }
             shot.update(blocks: correctedBlocks)

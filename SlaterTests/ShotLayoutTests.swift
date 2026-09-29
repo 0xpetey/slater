@@ -63,7 +63,7 @@ struct ShotLayoutTests {
     private let white = ColorSampler.RGB(red: 1, green: 1, blue: 1)
 
     private func block(_ text: String, _ bounds: CGRect) -> Block {
-        Block(lines: [Line(text: text, bounds: bounds)])
+        Block(lines: [Line(text: text, bounds: bounds)], source: .japanese)
     }
 
     @Test func patchCoversTheBlockInWindowPoints() {

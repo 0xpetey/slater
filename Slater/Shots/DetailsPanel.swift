@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The Japanese ↔ English list for one Shot, with copy buttons.
+/// The original ↔ translation list for one Shot, with copy buttons.
 @MainActor
 final class DetailsPanelController {
     private let panel: NSPanel
@@ -52,12 +52,12 @@ private struct DetailsView: View {
                         .foregroundStyle(.orange)
                 }
                 Spacer()
-                Button("Copy English") { copy(shot.englishText) }
-                Button("Copy Japanese + English") { copy(shot.bilingualText) }
+                Button("Copy \(shot.targetName)") { copy(shot.translatedText) }
+                Button("Copy \(shot.sourceName) + \(shot.targetName)") { copy(shot.bilingualText) }
             }
             .padding(10)
             Divider()
-            List(shot.japaneseBlockIndices, id: \.self) { index in
+            List(shot.sourceBlockIndices, id: \.self) { index in
                 DetailsRow(block: shot.blocks[index], translation: shot.translations[index])
             }
         }
@@ -95,7 +95,7 @@ private struct DetailsRow: View {
             }
             .buttonStyle(.borderless)
             .disabled(translation == nil)
-            .help("Copy English")
+            .help("Copy the translation")
         }
         .padding(.vertical, 4)
     }

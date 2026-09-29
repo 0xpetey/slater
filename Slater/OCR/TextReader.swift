@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 /// Reads a crop twice and reconciles the two readings (ADR 0002).
 ///
@@ -8,26 +9,28 @@ import CoreGraphics
 /// verifies the quick reading once it lands. Vision's confidence scores don't reveal either kind
 /// of failure, so disagreement between the two is the signal.
 enum TextReader {
-    /// Raw image, no language correction. Shown first.
-    static func quickRead(_ crop: CGImage) async throws -> [Line] {
-        try await TextRecognizer.recognize(crop, boundsSize: size(of: crop), languageCorrection: false)
+    /// Raw image, no language correction. Shown first. `languages` are Vision's identifiers,
+    /// from `TextRecognizer.visionLanguages(for:)`.
+    static func quickRead(_ crop: CGImage, languages: [Locale.Language]) async throws -> [Line] {
+        try await TextRecognizer.recognize(crop, boundsSize: size(of: crop), languageCorrection: false, languages: languages)
     }
 
     /// Rescaled image with language correction. Verifies and corrects the quick reading.
     /// `pixelsPerPoint` is the Capture's scale: 2 on Retina displays, 1 otherwise.
-    static func correctedRead(_ crop: CGImage, pixelsPerPoint: CGFloat) async throws -> [Line] {
+    static func correctedRead(_ crop: CGImage, pixelsPerPoint: CGFloat, languages: [Locale.Language]) async throws -> [Line] {
         try await TextRecognizer.recognize(
             ImagePreprocessor.prepare(crop, pixelsPerPoint: pixelsPerPoint),
             boundsSize: size(of: crop),
-            languageCorrection: true
+            languageCorrection: true,
+            languages: languages
         )
     }
 
     /// Both readings, reconciled. The app shows the quick reading before the corrected one is
-    /// in; this is for tests and for when the quick reading finds no Japanese at all.
-    static func read(_ crop: CGImage, pixelsPerPoint: CGFloat) async throws -> [Line] {
-        async let corrected = correctedRead(crop, pixelsPerPoint: pixelsPerPoint)
-        let quick = try await quickRead(crop)
+    /// in; this is for tests and for when the quick reading finds no source text at all.
+    static func read(_ crop: CGImage, pixelsPerPoint: CGFloat, languages: [Locale.Language]) async throws -> [Line] {
+        async let corrected = correctedRead(crop, pixelsPerPoint: pixelsPerPoint, languages: languages)
+        let quick = try await quickRead(crop, languages: languages)
         return reconcile(quick: quick, corrected: try await corrected)
     }
 

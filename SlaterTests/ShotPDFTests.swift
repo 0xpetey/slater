@@ -11,9 +11,9 @@ struct ShotPDFTests {
         context.fill(CGRect(x: 0, y: 0, width: 400, height: 200))
         let image = try #require(context.makeImage())
         let blocks = [
-            Block(lines: [Line(text: "品番", bounds: CGRect(x: 20, y: 20, width: 60, height: 30))]),
-            Block(lines: [Line(text: "AB-1024", bounds: CGRect(x: 20, y: 80, width: 120, height: 30))]),
-            Block(lines: [Line(text: "担当者", bounds: CGRect(x: 20, y: 140, width: 90, height: 30), isLowConfidence: true)]),
+            Block(lines: [Line(text: "品番", bounds: CGRect(x: 20, y: 20, width: 60, height: 30))], source: .japanese),
+            Block(lines: [Line(text: "AB-1024", bounds: CGRect(x: 20, y: 80, width: 120, height: 30))], source: .japanese),
+            Block(lines: [Line(text: "担当者", bounds: CGRect(x: 20, y: 140, width: 90, height: 30), isLowConfidence: true)], source: .japanese),
         ]
         let shot = Shot(image: image, screenRect: CGRect(x: 0, y: 0, width: 200, height: 100), blocks: blocks)
         shot.setTranslation("Item number", for: "品番", model: .fast)
