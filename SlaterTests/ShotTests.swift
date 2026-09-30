@@ -97,6 +97,17 @@ struct SecondModelTests {
     }
 }
 
+struct DefaultLanguageTests {
+    @Test func japaneseIntoEnglishUnlessTheMacRunsInJapanese() {
+        let usual = Translator.defaultLanguages(macLanguage: Locale.Language(identifier: "en-US"))
+        #expect(usual.source.languageCode?.identifier == "ja" && usual.target.languageCode?.identifier == "en")
+        let none = Translator.defaultLanguages(macLanguage: nil)
+        #expect(none.source.languageCode?.identifier == "ja" && none.target.languageCode?.identifier == "en")
+        let japaneseMac = Translator.defaultLanguages(macLanguage: Locale.Language(identifier: "ja-JP"))
+        #expect(japaneseMac.source.languageCode?.identifier == "en" && japaneseMac.target.languageCode?.identifier == "ja")
+    }
+}
+
 struct TranslationTidyingTests {
     @Test func shortLabelsLoseTheirArticle() {
         let english = Locale.Language(identifier: "en")

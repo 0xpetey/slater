@@ -50,15 +50,26 @@ final class Translator {
     private(set) var model = Model(rawValue: UserDefaults.standard.string(forKey: "translationModel") ?? "") ?? .fast
     @ObservationIgnored private var sessions: [String: TranslationSession] = [:]
 
-    /// Languages can be given for tests; otherwise the saved choice, defaulting to Japanese →
-    /// English, the pair Slater is built and tested around. Other pairs are offered as macOS
-    /// supports them and are only exercised through use.
+    /// Languages can be given for tests; otherwise the saved choice, or the defaults for the
+    /// Mac's language.
     init(source: Locale.Language? = nil, target: Locale.Language? = nil) {
         let defaults = UserDefaults.standard
         let savedSource = defaults.string(forKey: "sourceLanguage").map(Locale.Language.init(identifier:))
         let savedTarget = defaults.string(forKey: "targetLanguage").map(Locale.Language.init(identifier:))
-        self.source = source ?? savedSource ?? Locale.Language(identifier: "ja")
-        self.target = target ?? savedTarget ?? Locale.Language(identifier: "en")
+        let macLanguage = Locale.preferredLanguages.first.map(Locale.Language.init(identifier:))
+        let (defaultSource, defaultTarget) = Self.defaultLanguages(macLanguage: macLanguage)
+        self.source = source ?? savedSource ?? defaultSource
+        self.target = target ?? savedTarget ?? defaultTarget
+    }
+
+    /// Japanese → English, the pair Slater is built and tested around, unless the Mac itself
+    /// runs in Japanese, where reading English into Japanese is the likelier need. Other pairs
+    /// are offered as macOS supports them and are only exercised through use.
+    nonisolated static func defaultLanguages(macLanguage: Locale.Language?) -> (source: Locale.Language, target: Locale.Language) {
+        if macLanguage?.languageCode?.identifier == "ja" {
+            return (Locale.Language(identifier: "en"), Locale.Language(identifier: "ja"))
+        }
+        return (Locale.Language(identifier: "ja"), Locale.Language(identifier: "en"))
     }
 
     var sourceScript: SourceScript {
