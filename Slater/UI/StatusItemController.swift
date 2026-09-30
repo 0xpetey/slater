@@ -38,6 +38,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.delegate = self
         statusItem.menu = menu
+        observeLiveTranslation()
+    }
+
+    /// The lizard breathes while live translation runs.
+    private func observeLiveTranslation() {
+        withObservationTracking {
+            if appState.live.isRunning {
+                iconView.addSymbolEffect(.breathe, options: .repeating)
+            } else {
+                iconView.removeSymbolEffect(ofType: .breathe)
+            }
+        } onChange: {
+            Task { @MainActor [weak self] in self?.observeLiveTranslation() }
+        }
     }
 
     // AppKit sends the tracking area's owner `mouseEntered:`. Swift would derive
@@ -54,6 +68,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.addItem(item("Take Shot", #selector(takeShot)))
+        menu.addItem(item(appState.live.isRunning ? "Stop Live Translation" : "Start Live Translation", #selector(toggleLiveTranslation)))
         if !appState.isReady {
             menu.addItem(item("Finish Setup…", #selector(finishSetup)))
         }
@@ -86,6 +101,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func takeShot() {
         appState.takeShot()
+    }
+
+    @objc private func toggleLiveTranslation() {
+        appState.toggleLiveTranslation()
     }
 
     @objc private func finishSetup() {

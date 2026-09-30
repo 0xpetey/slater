@@ -118,3 +118,13 @@ This Mac is not enrolled in device management (MDM). If your work Mac is a diffe
   - On a second monitor, if you have one.
   - With Screen Recording permission denied, and with the Japanese language pack removed.
 - **Timing check:** the log (`log show --predicate 'subsystem == "app.slater"'`) records, per Shot: capture time after the hotkey, selection overlay time, quick reading and Shot-open time after selection, when the corrected reading was applied and how many Blocks it changed, and translation first-result and total times with the model used. Counts and milliseconds only, never text. Target: Shot open under 0.5 s for a paragraph-sized box, first translation within 1 s.
+
+## Experiment: live translation (branch `live-translation`)
+
+Translates every source-language Block on the whole screen as it changes, without drawing a box. Started and stopped from the menu bar ("Start Live Translation") or ⌥⇧5; the lizard breathes while it runs.
+
+- **Capture:** a ScreenCaptureKit stream per display at 2 fps, excluding Slater's own windows. Frames arrive only when the display changed. Changes under 0.3% of the display (a clock, a caret) are ignored once something is showing; changes over 30% (a scroll, a new window) clear the overlay immediately so stale patches don't sit over the wrong text.
+- **Reading:** the quick reading only, at half scale on Retina, no corrected pass: a full screen already costs about 0.5–1.5 s per pass, so verification would double it. No Low-confidence marks.
+- **Translation:** the active model (Fast by default) with an in-memory cache for the session, so text that stays on screen is translated once. The cache is dropped when live translation stops (ADR 0001).
+- **Overlay:** a transparent, click-through window per display with the usual patches; the user keeps working underneath.
+- **Costs and open questions:** continuous OCR keeps the neural engine busy for as long as it runs, which will show in energy use; patches lag the screen by up to a pass; boxes can jitter between passes; there's no way to peek at the original except stopping. These are the things to learn from using it.

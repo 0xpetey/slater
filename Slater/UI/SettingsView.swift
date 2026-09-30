@@ -11,6 +11,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             KeyboardShortcuts.Recorder("Take Shot:", name: .takeShot)
+            KeyboardShortcuts.Recorder("Live Translation:", name: .toggleLiveTranslation)
             Toggle("Open Slater when you log in", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, enabled in
                     LaunchAtLogin.isEnabled = enabled

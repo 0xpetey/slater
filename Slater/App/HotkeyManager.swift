@@ -4,13 +4,18 @@ extension KeyboardShortcuts.Name {
     /// ⌥⇧4 echoes the system's ⇧⌘4 screenshot shortcut. The macOS 15+ ban on
     /// Option-only hotkeys applies to sandboxed apps only, and Slater is not sandboxed.
     static let takeShot = Self("takeShot", default: .init(.four, modifiers: [.option, .shift]))
+    /// ⌥⇧5, next to Take Shot. Experimental live translation of the whole screen.
+    static let toggleLiveTranslation = Self("toggleLiveTranslation", default: .init(.five, modifiers: [.option, .shift]))
 }
 
 @MainActor
 final class HotkeyManager {
-    init(onTakeShot: @escaping @MainActor () -> Void) {
+    init(onTakeShot: @escaping @MainActor () -> Void, onToggleLiveTranslation: @escaping @MainActor () -> Void) {
         KeyboardShortcuts.onKeyDown(for: .takeShot) {
             MainActor.assumeIsolated { onTakeShot() }
+        }
+        KeyboardShortcuts.onKeyDown(for: .toggleLiveTranslation) {
+            MainActor.assumeIsolated { onToggleLiveTranslation() }
         }
     }
 }

@@ -15,6 +15,8 @@ final class AppState {
     let permissions = PermissionsManager()
     let translator: Translator
     let shots: ShotStore
+    /// Experimental whole-screen live translation.
+    let live: LiveTranslationController
     @ObservationIgnored private var hotkeys: HotkeyManager?
     @ObservationIgnored private var onboarding: OnboardingWindowController?
     @ObservationIgnored private let selectionOverlay = SelectionOverlayController()
@@ -24,10 +26,14 @@ final class AppState {
         let translator = Translator()
         self.translator = translator
         shots = ShotStore(translator: translator)
+        live = LiveTranslationController(translator: translator)
     }
 
     func start() {
-        hotkeys = HotkeyManager { [weak self] in self?.takeShot() }
+        hotkeys = HotkeyManager(
+            onTakeShot: { [weak self] in self?.takeShot() },
+            onToggleLiveTranslation: { [weak self] in self?.toggleLiveTranslation() }
+        )
         Task {
             await translator.refresh()
             if !isReady {
@@ -58,6 +64,14 @@ final class AppState {
     /// Screen Recording is granted and a translation model is installed.
     var isReady: Bool {
         permissions.hasScreenRecording && translator.hasInstalledModel
+    }
+
+    func toggleLiveTranslation() {
+        guard isReady else {
+            showOnboarding()
+            return
+        }
+        live.toggle()
     }
 
     func takeShot() {
