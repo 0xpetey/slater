@@ -137,6 +137,12 @@ struct LanguagePickers: View {
             .labelsHidden()
         }
         .disabled(translator.supportedLanguages.isEmpty)
+        if translator.source.languageCode?.identifier != "ja" || translator.target.languageCode?.identifier != "en" {
+            Text("Slater is built and tested for Japanese → English. Other languages are offered as macOS supports them; expect rougher edges.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

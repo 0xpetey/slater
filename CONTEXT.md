@@ -21,11 +21,11 @@ One or more Lines that continue one another and read as one unit, such as a para
 _Avoid_: Paragraph, chunk, region
 
 **Source language**:
-The language the user has chosen to read off the screen (Japanese by default). It must be one macOS can translate on-device and Vision can read.
+The language the user has chosen to read off the screen. Japanese by default, and the one Slater is built and tested for; it must be one macOS can translate on-device and Vision can read.
 _Avoid_: Input language, from-language
 
 **Target language**:
-The language translations are written in (the Mac's language by default, or English).
+The language translations are written in (English by default).
 _Avoid_: Output language, to-language
 
 **Source Block**:

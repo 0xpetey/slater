@@ -2,7 +2,7 @@
 
 "It's slop, but it is MY slop"
 
-A macOS menu bar app: press a hotkey, drag a box over text on screen, and get an in-place translation. Japanese to English by default; any pair macOS can translate on-device and read with Vision can be chosen in Settings. Everything runs on-device. See `plan.md` for the design, `CONTEXT.md` for the glossary and `docs/adr/` for decisions.
+A macOS menu bar app: press a hotkey, drag a box over text on screen, and get an in-place translation. Built and tested for Japanese → English, which is the default; any other pair macOS can translate on-device and read with Vision can be chosen in Settings, as-is. Everything runs on-device. See `plan.md` for the design, `CONTEXT.md` for the glossary and `docs/adr/` for decisions.
 
 ## Build and run
 
