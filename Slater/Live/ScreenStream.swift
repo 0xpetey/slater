@@ -2,16 +2,15 @@ import CoreImage
 import CoreMedia
 import ScreenCaptureKit
 
-/// Frames from one display as its content changes, for live translation. Frames arrive only
-/// when something on the display changed, at most `framesPerSecond` times a second, and only
+/// Frames from one display, for live translation: at most `framesPerSecond` a second, and only
 /// the newest one is kept, since a pass over a frame takes longer than a frame interval.
+/// ScreenCaptureKit's own change reports aren't used; they flag the compositor's work, which
+/// includes Slater's overlay, so `FrameDiff` compares the captured pixels instead.
 final class ScreenStream: NSObject, SCStreamOutput, @unchecked Sendable {
     struct Frame: Sendable {
         let image: CGImage
         /// Pixels per point.
         let scale: CGFloat
-        /// The share of the display that changed since the previous frame, 0–1.
-        let dirtyFraction: Double
     }
 
     let frames: AsyncStream<Frame>
@@ -56,13 +55,6 @@ final class ScreenStream: NSObject, SCStreamOutput, @unchecked Sendable {
         guard let image = context.createCGImage(CIImage(cvPixelBuffer: pixelBuffer), from: CGRect(x: 0, y: 0, width: width, height: height)) else { return }
 
         let scale = (info[.scaleFactor] as? CGFloat) ?? 2
-        let contentRect = (info[.contentRect] as? NSDictionary).flatMap { CGRect(dictionaryRepresentation: $0) }
-            ?? CGRect(x: 0, y: 0, width: CGFloat(width) / scale, height: CGFloat(height) / scale)
-        let dirty = (info[.dirtyRects] as? [NSDictionary])?.compactMap { CGRect(dictionaryRepresentation: $0) } ?? [contentRect]
-        let area = max(1, contentRect.width * contentRect.height)
-        var dirtyArea = dirty.reduce(0) { $0 + $1.width * $1.height }
-        // Dirty rects may come in pixels rather than points; an area larger than the display says so.
-        if dirtyArea > area { dirtyArea /= scale * scale }
-        continuation.yield(Frame(image: image, scale: scale, dirtyFraction: min(1, dirtyArea / area)))
+        continuation.yield(Frame(image: image, scale: scale))
     }
 }

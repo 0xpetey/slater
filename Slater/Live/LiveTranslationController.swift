@@ -16,11 +16,8 @@ private let logger = Logger(subsystem: "app.slater", category: "live")
 final class LiveTranslationController {
     static let framesPerSecond = 2
     /// Changes smaller than this share of the display (a clock, a blinking caret) don't trigger
-    /// a pass once something is showing.
-    static let ignoredChange = 0.003
-    /// Changes larger than this (a scroll, a new window) clear the overlay until the next pass,
-    /// so stale patches don't sit over the wrong text.
-    static let clearingChange = 0.3
+    /// a pass.
+    static let ignoredChange = 0.002
 
     private(set) var isRunning = false
     private let translator: Translator
@@ -81,17 +78,27 @@ final class LiveTranslationController {
     }
 
     private func run(_ stream: ScreenStream, screen: NSScreen, overlay: LiveOverlayController) async {
-        var hasShownSomething = false
+        var previous: FrameDiff?
         for await frame in stream.frames {
             if Task.isCancelled { return }
-            if hasShownSomething && frame.dirtyFraction < Self.ignoredChange { continue }
-            if frame.dirtyFraction > Self.clearingChange { overlay.clear() }
-            await process(frame, screen: screen, overlay: overlay)
-            hasShownSomething = true
+            let diff = FrameDiff(image: frame.image)
+            let (mask, fraction) = diff.changes(since: previous)
+            if fraction < Self.ignoredChange { continue }
+            // Patches over what changed come off at once; the rest stay until the pass lands.
+            let pixelsPerPoint = CGFloat(frame.image.width) / screen.frame.width
+            overlay.hide { patch in
+                let frameInPixels = CGRect(
+                    x: patch.frame.minX * pixelsPerPoint, y: patch.frame.minY * pixelsPerPoint,
+                    width: patch.frame.width * pixelsPerPoint, height: patch.frame.height * pixelsPerPoint
+                )
+                return FrameDiff.mask(mask, columns: diff.columns, rows: diff.rows, intersects: frameInPixels)
+            }
+            previous = diff
+            await process(frame, screen: screen, overlay: overlay, change: fraction)
         }
     }
 
-    private func process(_ frame: ScreenStream.Frame, screen: NSScreen, overlay: LiveOverlayController) async {
+    private func process(_ frame: ScreenStream.Frame, screen: NSScreen, overlay: LiveOverlayController, change: Double) async {
         let started = ContinuousClock.now
         let image = frame.image
         let size = CGSize(width: image.width, height: image.height)
@@ -123,6 +130,6 @@ final class LiveTranslationController {
         let elapsed = ContinuousClock.now - started
         let milliseconds = elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000
         // Counts and timings only, never text (ADR 0001).
-        logger.notice("Live pass: \(lines.count) lines, \(shot.sourceBlockIndices.count) to translate (\(hits) cached), \(milliseconds) ms, change \(Int(frame.dirtyFraction * 100))%")
+        logger.notice("Live pass: \(lines.count) lines, \(shot.sourceBlockIndices.count) to translate (\(hits) cached), \(milliseconds) ms, change \(Int(change * 100))%")
     }
 }

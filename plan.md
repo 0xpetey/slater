@@ -123,7 +123,7 @@ This Mac is not enrolled in device management (MDM). If your work Mac is a diffe
 
 Translates every source-language Block on the whole screen as it changes, without drawing a box. Started and stopped from the menu bar ("Start Live Translation") or ⌥⇧5; the lizard breathes while it runs.
 
-- **Capture:** a ScreenCaptureKit stream per display at 2 fps, excluding Slater's own windows. Frames arrive only when the display changed. Changes under 0.3% of the display (a clock, a caret) are ignored once something is showing; changes over 30% (a scroll, a new window) clear the overlay immediately so stale patches don't sit over the wrong text.
+- **Capture:** a ScreenCaptureKit stream per display at 2 fps, excluding Slater's own windows. Change is measured from the captured pixels (a 1/16-scale grayscale thumbnail compared to the last pass), not from ScreenCaptureKit's dirty rectangles: those report the compositor's work, which includes the overlay itself, so on a quiet screen they kept reporting 70–96% change and the loop fed itself. Changes under 0.2% of the display (a clock, a caret) are ignored; where the screen did change, the patches over that area come off at once and the rest stay until the next pass lands.
 - **Reading:** the quick reading only, at half scale on Retina, no corrected pass: a full screen already costs about 0.5–1.5 s per pass, so verification would double it. No Low-confidence marks.
 - **Translation:** the active model (Fast by default) with an in-memory cache for the session, so text that stays on screen is translated once. The cache is dropped when live translation stops (ADR 0001).
 - **Overlay:** a transparent, click-through window per display with the usual patches; the user keeps working underneath.

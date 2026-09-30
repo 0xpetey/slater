@@ -7,6 +7,8 @@ import SwiftUI
 final class LiveOverlayState {
     /// The latest pass over the display, or nil while the overlay is cleared.
     var shot: Shot?
+    /// Patches hidden because the screen under them changed since the pass.
+    var hiddenPatches: Set<Int> = []
 }
 
 /// A transparent, click-through panel over one display carrying the live patches, so the user
@@ -32,10 +34,18 @@ final class LiveOverlayController {
 
     func show(_ shot: Shot) {
         state.shot = shot
+        state.hiddenPatches = []
+    }
+
+    /// Hides the patches whose screen area changed, keeping the rest until the next pass lands.
+    func hide(where changed: (Patch) -> Bool) {
+        guard let shot = state.shot else { return }
+        state.hiddenPatches.formUnion(shot.patches.filter(changed).map(\.index))
     }
 
     func clear() {
         state.shot = nil
+        state.hiddenPatches = []
     }
 
     func close() {
@@ -52,7 +62,7 @@ struct LiveOverlayView: View {
             Color.clear
             if let shot = state.shot {
                 ForEach(shot.patches) { patch in
-                    if let slot = shot.slot(for: patch.index) {
+                    if !state.hiddenPatches.contains(patch.index), let slot = shot.slot(for: patch.index) {
                         PatchView(patch: patch, slot: slot, model: shot.displayedModel, isLowConfidence: false)
                             .frame(width: patch.frame.width, height: patch.frame.height)
                             .offset(x: patch.frame.minX, y: patch.frame.minY)
