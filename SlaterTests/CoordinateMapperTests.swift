@@ -39,6 +39,21 @@ struct CoordinateMapperTests {
         #expect(pixels == CGRect(x: 2800, y: 0, width: 80, height: 40))
     }
 
+    @Test func topLeftRectFlipsWithinTheScreen() {
+        // A window 50 points below the top of a 1050-point screen, as AppKit and then a view see it.
+        let rect = CoordinateMapper.topLeftRect(forLocalRect: CGRect(x: 100, y: 700, width: 400, height: 300), screenHeight: 1050)
+        #expect(rect == CGRect(x: 100, y: 50, width: 400, height: 300))
+    }
+
+    @Test func theWindowServerFlipIsItsOwnInverse() {
+        // A window 50 points below the top of a 1050-point main screen, as the window server
+        // and then AppKit place it.
+        let bounds = CGRect(x: 100, y: 50, width: 400, height: 300)
+        let global = CoordinateMapper.flippedGlobalRect(bounds, mainScreenHeight: 1050)
+        #expect(global == CGRect(x: 100, y: 700, width: 400, height: 300))
+        #expect(CoordinateMapper.flippedGlobalRect(global, mainScreenHeight: 1050) == bounds)
+    }
+
     @Test func secondaryScreenOffsetsIntoGlobalSpace() {
         // A screen to the left of and below the main screen.
         let global = CoordinateMapper.globalRect(

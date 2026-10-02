@@ -13,6 +13,12 @@ enum ImagePreprocessor {
 
     private static let context = CIContext()
 
+    /// The image resampled by `scale`.
+    static func scaled(_ image: CGImage, by scale: CGFloat) -> CGImage {
+        let output = CIImage(cgImage: image).applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: scale])
+        return context.createCGImage(output, from: output.extent) ?? image
+    }
+
     /// `pixelsPerPoint` is the Capture's scale: 2 on Retina displays, 1 otherwise.
     static func prepare(_ image: CGImage, pixelsPerPoint: CGFloat) -> CGImage {
         var output = CIImage(cgImage: image)

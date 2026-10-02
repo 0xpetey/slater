@@ -15,6 +15,8 @@ final class AppState {
     let permissions = PermissionsManager()
     let translator: Translator
     let shots: ShotStore
+    /// Experimental whole-screen live translation.
+    let live: LiveTranslationController
     @ObservationIgnored private var hotkeys: HotkeyManager?
     @ObservationIgnored private var onboarding: OnboardingWindowController?
     @ObservationIgnored private let selectionOverlay = SelectionOverlayController()
@@ -24,10 +26,18 @@ final class AppState {
         let translator = Translator()
         self.translator = translator
         shots = ShotStore(translator: translator)
+        live = LiveTranslationController(translator: translator)
     }
 
     func start() {
-        hotkeys = HotkeyManager { [weak self] in self?.takeShot() }
+        hotkeys = HotkeyManager(
+            onTakeShot: { [weak self] in self?.takeShot() },
+            onTakeWindowShot: { [weak self] in self?.takeWindowShot() },
+            onToggleLiveTranslation: { [weak self] in self?.toggleLiveTranslation() },
+            onToggleLiveWindowTranslation: { [weak self] in self?.toggleLiveWindowTranslation() },
+            onFreezeLiveTranslation: { [weak self] in self?.live.toggleFreeze() }
+        )
+        observeLiveTranslationSetting()
         Task {
             await translator.refresh()
             if !isReady {
@@ -60,11 +70,79 @@ final class AppState {
         permissions.hasScreenRecording && translator.hasInstalledModel
     }
 
+    /// The live translation hotkeys follow the setting, so they don't take their keys from the
+    /// user until the feature is on.
+    private func observeLiveTranslationSetting() {
+        withObservationTracking {
+            hotkeys?.setLiveTranslationEnabled(live.isEnabled)
+        } onChange: {
+            Task { @MainActor [weak self] in self?.observeLiveTranslationSetting() }
+        }
+    }
+
+    /// Live translation of every display: stops it if that's running, or takes over from a window.
+    func toggleLiveTranslation() {
+        guard live.isEnabled else { return }
+        guard isReady else {
+            showOnboarding()
+            return
+        }
+        live.toggle(.screen)
+    }
+
+    /// Live translation of the front window, the one a Shot of Front Window would take: stops
+    /// it if a window is live, or takes over from the whole screen.
+    func toggleLiveWindowTranslation() {
+        guard live.isEnabled else { return }
+        guard isReady else {
+            showOnboarding()
+            return
+        }
+        if live.isRunning, live.scope.isWindow {
+            live.stop()
+            return
+        }
+        guard let window = FrontWindow.front() else {
+            NoticePanel.show("No window in front")
+            return
+        }
+        live.toggle(.window(window.id))
+    }
+
+    /// Takes over from live translation, if it's running.
     func takeShot() {
         guard !isTakingShot else { return }
         permissions.refresh()
         guard isReady else {
             showOnboarding()
+            return
+        }
+        live.stop()
+        isTakingShot = true
+        translator.warmUp()
+        let pressed = ContinuousClock.now
+        Task {
+            defer { isTakingShot = false }
+            do {
+                try await captureAndSelect(pressedAt: pressed)
+            } catch {
+                logger.error("Capture failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// A Shot of the front window, with no box to draw. Takes over from live translation, if
+    /// it's running.
+    func takeWindowShot() {
+        guard !isTakingShot else { return }
+        permissions.refresh()
+        guard isReady else {
+            showOnboarding()
+            return
+        }
+        live.stop()
+        guard let selection = FrontWindow.selection() else {
+            NoticePanel.show("No window in front")
             return
         }
         isTakingShot = true
@@ -73,7 +151,9 @@ final class AppState {
         Task {
             defer { isTakingShot = false }
             do {
-                try await captureAndSelect(pressedAt: pressed)
+                let captures = try await ScreenCapturer.captureAllDisplays()
+                logger.notice("Captured \(captures.count) displays \(milliseconds(since: pressed)) ms after the window hotkey")
+                try await makeShot(of: selection, in: captures)
             } catch {
                 logger.error("Capture failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -94,6 +174,12 @@ final class AppState {
             return
         }
         let captures = try await captureTask.value
+        try await makeShot(of: selection, in: captures)
+    }
+
+    /// Crops the selection out of its display's Capture, reads it twice (ADR 0002) and opens
+    /// the Shot.
+    private func makeShot(of selection: SelectionOverlayController.Selection, in captures: [DisplayCapture]) async throws {
         guard let capture = captures.first(where: { $0.displayID == selection.displayID }) else { return }
 
         let pixelRect = CoordinateMapper.pixelRect(

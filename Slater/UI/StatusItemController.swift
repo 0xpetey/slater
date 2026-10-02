@@ -1,4 +1,5 @@
 import AppKit
+@preconcurrency import KeyboardShortcuts
 import SwiftUI
 import Symbols
 
@@ -38,6 +39,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.delegate = self
         statusItem.menu = menu
+        observeLiveTranslation()
+    }
+
+    /// The lizard breathes while live translation runs.
+    private func observeLiveTranslation() {
+        withObservationTracking {
+            if appState.live.isRunning {
+                iconView.addSymbolEffect(.breathe, options: .repeating)
+            } else {
+                iconView.removeSymbolEffect(ofType: .breathe)
+            }
+        } onChange: {
+            Task { @MainActor [weak self] in self?.observeLiveTranslation() }
+        }
     }
 
     // AppKit sends the tracking area's owner `mouseEntered:`. Swift would derive
@@ -50,10 +65,29 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         iconView.removeSymbolEffect(ofType: .rotate)
     }
 
-    /// Rebuilt each time it opens, so the Open Shots list is current.
+    /// Rebuilt each time it opens, so the Open Shots list and the hotkeys are current.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        menu.addItem(item("Take Shot", #selector(takeShot)))
+        menu.addItem(item("Take Shot", #selector(takeShot), hotkey: .takeShot))
+        menu.addItem(item("Take Shot of Front Window", #selector(takeWindowShot), hotkey: .takeWindowShot))
+        // Live translation is opted into in Settings.
+        let live = appState.live
+        if live.isEnabled {
+            menu.addItem(item(
+                live.isRunning && !live.scope.isWindow ? "Stop Live Translation" : "Start Live Translation",
+                #selector(toggleLiveTranslation), hotkey: .toggleLiveTranslation
+            ))
+            menu.addItem(item(
+                live.isRunning && live.scope.isWindow ? "Stop Live Translation of Front Window" : "Start Live Translation of Front Window",
+                #selector(toggleLiveWindowTranslation), hotkey: .toggleLiveWindowTranslation
+            ))
+            if live.isRunning {
+                menu.addItem(item(
+                    live.isFrozen ? "Unfreeze Screen" : "Freeze Screen",
+                    #selector(toggleFreeze), hotkey: .freezeLiveTranslation
+                ))
+            }
+        }
         if !appState.isReady {
             menu.addItem(item("Finish Setup…", #selector(finishSetup)))
         }
@@ -78,14 +112,36 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(item("Quit Slater", #selector(quit), key: "q"))
     }
 
-    private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
+    /// `key` is a fixed ⌘ key; `hotkey` is one the user can rebind in Settings, shown as it is
+    /// bound now. The menu is rebuilt on each open, so the item reads the binding once rather than
+    /// observing it with `setShortcut(for:)`, whose observer keeps every discarded item alive.
+    private func item(_ title: String, _ action: Selector, key: String = "", hotkey: KeyboardShortcuts.Name? = nil) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
+        if let hotkey {
+            item.setShortcut(hotkey.shortcut)
+        }
         return item
     }
 
     @objc private func takeShot() {
         appState.takeShot()
+    }
+
+    @objc private func takeWindowShot() {
+        appState.takeWindowShot()
+    }
+
+    @objc private func toggleLiveTranslation() {
+        appState.toggleLiveTranslation()
+    }
+
+    @objc private func toggleLiveWindowTranslation() {
+        appState.toggleLiveWindowTranslation()
+    }
+
+    @objc private func toggleFreeze() {
+        appState.live.toggleFreeze()
     }
 
     @objc private func finishSetup() {
@@ -108,7 +164,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
                 window.title = "Slater Settings"
                 window.isReleasedWhenClosed = false
-                window.contentViewController = NSHostingController(rootView: SettingsView(translator: appState.translator))
+                window.contentViewController = NSHostingController(rootView: SettingsView(translator: appState.translator, live: appState.live))
                 window.center()
                 settingsWindow = window
             }
