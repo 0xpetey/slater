@@ -7,7 +7,7 @@ struct SlaterApp: App {
     var body: some Scene {
         // The menu bar item is AppKit (StatusItemController), so the lizard can spin on hover.
         Settings {
-            SettingsView(translator: appDelegate.appState.translator)
+            SettingsView(translator: appDelegate.appState.translator, live: appDelegate.appState.live)
         }
     }
 }

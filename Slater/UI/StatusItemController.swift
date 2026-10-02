@@ -70,20 +70,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         menu.addItem(item("Take Shot", #selector(takeShot), hotkey: .takeShot))
         menu.addItem(item("Take Shot of Front Window", #selector(takeWindowShot), hotkey: .takeWindowShot))
+        // Live translation is opted into in Settings.
         let live = appState.live
-        menu.addItem(item(
-            live.isRunning && !live.scope.isWindow ? "Stop Live Translation" : "Start Live Translation",
-            #selector(toggleLiveTranslation), hotkey: .toggleLiveTranslation
-        ))
-        menu.addItem(item(
-            live.isRunning && live.scope.isWindow ? "Stop Live Translation of Front Window" : "Start Live Translation of Front Window",
-            #selector(toggleLiveWindowTranslation), hotkey: .toggleLiveWindowTranslation
-        ))
-        if live.isRunning {
+        if live.isEnabled {
             menu.addItem(item(
-                appState.live.isFrozen ? "Unfreeze Screen" : "Freeze Screen",
-                #selector(toggleFreeze), hotkey: .freezeLiveTranslation
+                live.isRunning && !live.scope.isWindow ? "Stop Live Translation" : "Start Live Translation",
+                #selector(toggleLiveTranslation), hotkey: .toggleLiveTranslation
             ))
+            menu.addItem(item(
+                live.isRunning && live.scope.isWindow ? "Stop Live Translation of Front Window" : "Start Live Translation of Front Window",
+                #selector(toggleLiveWindowTranslation), hotkey: .toggleLiveWindowTranslation
+            ))
+            if live.isRunning {
+                menu.addItem(item(
+                    live.isFrozen ? "Unfreeze Screen" : "Freeze Screen",
+                    #selector(toggleFreeze), hotkey: .freezeLiveTranslation
+                ))
+            }
         }
         if !appState.isReady {
             menu.addItem(item("Finish Setup…", #selector(finishSetup)))
@@ -161,7 +164,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
                 window.title = "Slater Settings"
                 window.isReleasedWhenClosed = false
-                window.contentViewController = NSHostingController(rootView: SettingsView(translator: appState.translator))
+                window.contentViewController = NSHostingController(rootView: SettingsView(translator: appState.translator, live: appState.live))
                 window.center()
                 settingsWindow = window
             }

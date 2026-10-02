@@ -42,6 +42,16 @@ final class LiveTranslationController {
         }
     }
 
+    /// Off until the user opts in, in Settings, the feature being experimental: the menu items
+    /// and the hotkeys come and go with it. Turning it off ends a running session.
+    var isEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isEnabled, forKey: Self.enabledKey)
+            if !isEnabled { stop() }
+        }
+    }
+    private static let enabledKey = "liveTranslationEnabled"
+
     private(set) var isRunning = false
     /// What's being translated while running; the last scope otherwise.
     private(set) var scope: Scope = .screen
@@ -57,6 +67,7 @@ final class LiveTranslationController {
 
     init(translator: Translator) {
         self.translator = translator
+        isEnabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
     }
 
     /// Starts live translation of `scope`, or stops it if that's what's running. The screen's

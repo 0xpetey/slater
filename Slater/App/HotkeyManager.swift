@@ -40,4 +40,15 @@ final class HotkeyManager {
             MainActor.assumeIsolated { onFreezeLiveTranslation() }
         }
     }
+
+    /// The live translation hotkeys are registered only while the feature is on, so that the
+    /// keys type as usual otherwise. The handlers stay; a disabled name just has no hotkey.
+    func setLiveTranslationEnabled(_ enabled: Bool) {
+        let names: [KeyboardShortcuts.Name] = [.toggleLiveTranslation, .toggleLiveWindowTranslation, .freezeLiveTranslation]
+        if enabled {
+            KeyboardShortcuts.enable(names)
+        } else {
+            KeyboardShortcuts.disable(names)
+        }
+    }
 }

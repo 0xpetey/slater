@@ -37,6 +37,7 @@ final class AppState {
             onToggleLiveWindowTranslation: { [weak self] in self?.toggleLiveWindowTranslation() },
             onFreezeLiveTranslation: { [weak self] in self?.live.toggleFreeze() }
         )
+        observeLiveTranslationSetting()
         Task {
             await translator.refresh()
             if !isReady {
@@ -69,8 +70,19 @@ final class AppState {
         permissions.hasScreenRecording && translator.hasInstalledModel
     }
 
+    /// The live translation hotkeys follow the setting, so they don't take their keys from the
+    /// user until the feature is on.
+    private func observeLiveTranslationSetting() {
+        withObservationTracking {
+            hotkeys?.setLiveTranslationEnabled(live.isEnabled)
+        } onChange: {
+            Task { @MainActor [weak self] in self?.observeLiveTranslationSetting() }
+        }
+    }
+
     /// Live translation of every display: stops it if that's running, or takes over from a window.
     func toggleLiveTranslation() {
+        guard live.isEnabled else { return }
         guard isReady else {
             showOnboarding()
             return
@@ -81,6 +93,7 @@ final class AppState {
     /// Live translation of the front window, the one a Shot of Front Window would take: stops
     /// it if a window is live, or takes over from the whole screen.
     func toggleLiveWindowTranslation() {
+        guard live.isEnabled else { return }
         guard isReady else {
             showOnboarding()
             return
