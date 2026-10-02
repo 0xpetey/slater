@@ -30,7 +30,7 @@ enum ScreenCapturer {
     /// Captures every display at native resolution. Slater's own windows (open Shots, menus,
     /// onboarding) are excluded, so a new Shot always sees the content underneath.
     static func captureAllDisplays() async throws -> [DisplayCapture] {
-        let content: SCShareableContent
+        var content: SCShareableContent
         if let cached = Self.content {
             content = cached
         } else {
@@ -39,7 +39,15 @@ enum ScreenCapturer {
         // Windows come and go, which is harmless since the filter is by application, but keep
         // the list fresh for the next Shot anyway.
         defer { warmUp() }
-        let slater = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
+        let isSlater = { (application: SCRunningApplication) in application.processID == ProcessInfo.processInfo.processIdentifier }
+        var slater = content.applications.filter(isSlater)
+        if slater.isEmpty {
+            // ScreenCaptureKit lists an app only while it has a window on screen. The list may
+            // predate Slater's first window; the selection overlay is up now, so fetch again
+            // rather than capture it.
+            content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            slater = content.applications.filter(isSlater)
+        }
 
         var captures: [DisplayCapture] = []
         for display in content.displays {
