@@ -1,4 +1,5 @@
 import AppKit
+@preconcurrency import KeyboardShortcuts
 import Observation
 import os
 import ScreenCaptureKit
@@ -12,16 +13,23 @@ private let logger = Logger(subsystem: "app.slater", category: "live")
 /// decides when the screen changed in a way worth a pass (a new slide, not a camera tile) and
 /// when the change has settled; a pass is the quick OCR reading, shown at once, then the
 /// corrected reading, both grouped as usual and translated with the active model, with
-/// translations cached for the session so unchanged text is never sent twice.
+/// translations cached for the session so unchanged text is never sent twice. A hotkey freezes
+/// the screen at the frame the patches belong to, so a slide can be read after the presenter
+/// has moved on.
 @MainActor
 @Observable
 final class LiveTranslationController {
     static let framesPerSecond = 2
+    /// When this much of the screen has moved since the running pass's frame, the pass is
+    /// abandoned for the one waiting, since most of what it would show is stale.
+    static let restartFraction = 0.1
 
     private(set) var isRunning = false
+    /// Every display is held at a frame, with its patches, until unfrozen.
+    private(set) var isFrozen = false
     private let translator: Translator
     private var streams: [ScreenStream] = []
-    private var overlays: [LiveOverlayController] = []
+    private var loops: [DisplayLoop] = []
     private var tasks: [Task<Void, Never>] = []
     /// Translations made in this live session. Memory only, and dropped when live translation
     /// stops (ADR 0001).
@@ -45,20 +53,20 @@ final class LiveTranslationController {
         // The overlays go up first: ScreenCaptureKit lists an app only while it has a window on
         // screen, and the overlays must be excluded from the capture, or their patches would
         // read as change and every pass would trigger the next.
-        var overlaysByDisplay: [CGDirectDisplayID: (NSScreen, LiveOverlayController)] = [:]
+        var loopsByDisplay: [CGDirectDisplayID: DisplayLoop] = [:]
         for screen in NSScreen.screens {
             guard let displayID = screen.displayID else { continue }
-            overlaysByDisplay[displayID] = (screen, LiveOverlayController(screen: screen))
+            loopsByDisplay[displayID] = DisplayLoop(screen: screen, overlay: LiveOverlayController(screen: screen))
         }
-        overlays = overlaysByDisplay.values.map(\.1)
+        loops = Array(loopsByDisplay.values)
         do {
             let (content, slater) = try await ScreenCapturer.contentListingSlater()
             guard !slater.isEmpty else { throw LiveError.notListed }
             for display in content.displays {
-                guard let (screen, overlay) = overlaysByDisplay[display.displayID] else { continue }
+                guard let loop = loopsByDisplay[display.displayID] else { continue }
                 let stream = try ScreenStream(display: display, excluding: slater, framesPerSecond: Self.framesPerSecond)
                 streams.append(stream)
-                tasks.append(Task { await self.run(stream, screen: screen, overlay: overlay) })
+                tasks.append(Task { await self.run(stream, loop: loop) })
                 try await stream.start()
             }
             logger.notice("Live translation started on \(self.streams.count) displays")
@@ -83,46 +91,116 @@ final class LiveTranslationController {
         Task {
             for stream in streams { await stream.stop() }
         }
-        overlays.forEach { $0.close() }
-        overlays = []
+        for loop in loops {
+            loop.pass?.cancel()
+            loop.overlay.close()
+        }
+        loops = []
         cache.removeAll()
         isRunning = false
+        isFrozen = false
         logger.notice("Live translation stopped")
+    }
+
+    func toggleFreeze() {
+        guard isRunning else { return }
+        if isFrozen {
+            unfreeze()
+        } else {
+            freeze()
+        }
+    }
+
+    /// Holds each display at the frame its patches belong to: the running pass's frame, which
+    /// it finishes on; or, if the screen changed since the last pass, the newest frame, read
+    /// right away instead of waiting for it to settle; or else the last pass's frame.
+    private func freeze() {
+        isFrozen = true
+        let hint = KeyboardShortcuts.getShortcut(for: .freezeLiveTranslation).map { "\($0) to resume" }
+        for loop in loops {
+            let frame: ScreenStream.Frame?
+            if loop.pass != nil {
+                frame = loop.passFrame
+            } else if loop.pending != nil || loop.detector.isPending {
+                frame = loop.latest
+                loop.pending = frame
+            } else {
+                frame = loop.passFrame ?? loop.latest
+            }
+            guard let frame else { continue }
+            loop.frozen = (frame, FrameDiff(image: frame.image))
+            loop.stale = nil
+            loop.overlay.freeze(frame.image, hint: hint)
+            // Patches from a pass over this very frame are all good, whatever moved since.
+            if loop.overlay.state.shot?.image === frame.image {
+                loop.overlay.state.hiddenPatches = []
+            }
+            startPendingPass(loop)
+        }
+    }
+
+    /// Lets the live screen through again. Whatever changed under the frozen frame is read at
+    /// once; the detector keeps what it learned about video, so a camera tile isn't re-learned.
+    private func unfreeze() {
+        isFrozen = false
+        for loop in loops {
+            guard let frozen = loop.frozen else { continue }
+            loop.frozen = nil
+            loop.overlay.unfreeze()
+            guard let latest = loop.latest, latest.image !== frozen.frame.image else { continue }
+            let diff = FrameDiff(image: latest.image)
+            loop.previous = diff
+            let changes = diff.changes(since: frozen.diff).clustered()
+            guard changes.fraction >= ChangeDetector.significantFraction else { continue }
+            loop.overlay.hide { changes.intersects(Self.pixelFrame(of: $0, scale: latest.scale)) }
+            loop.pending = latest
+            startPendingPass(loop)
+        }
     }
 
     /// Per-display state: detection runs at frame rate while a pass runs in the background,
     /// so video regions keep being learned and a new slide is noticed during a pass.
     @MainActor
     private final class DisplayLoop {
+        let screen: NSScreen
+        let overlay: LiveOverlayController
         var previous: FrameDiff?
         var detector = ChangeDetector(framesPerSecond: LiveTranslationController.framesPerSecond)
         var pass: Task<Void, Never>?
+        /// The frame the running, or else the last, pass reads.
+        var passFrame: ScreenStream.Frame?
         /// A settled frame waiting for the running pass to finish.
         var pending: ScreenStream.Frame?
         /// Cells that moved since the frame the running pass is reading. Patches the pass puts
         /// over them are stale, so they're held back until the next pass.
         var stale: CellMask?
+        /// The newest frame, frozen or not.
+        var latest: ScreenStream.Frame?
+        /// While frozen: the frame on show, and its thumbnail for finding what changed once
+        /// unfrozen.
+        var frozen: (frame: ScreenStream.Frame, diff: FrameDiff)?
+
+        init(screen: NSScreen, overlay: LiveOverlayController) {
+            self.screen = screen
+            self.overlay = overlay
+        }
     }
 
-    /// When this much of the screen has moved since the running pass's frame, the pass is
-    /// abandoned for the one waiting, since most of what it would show is stale.
-    static let restartFraction = 0.1
-
-    private func run(_ stream: ScreenStream, screen: NSScreen, overlay: LiveOverlayController) async {
-        let loop = DisplayLoop()
-        defer { loop.pass?.cancel() }
+    private func run(_ stream: ScreenStream, loop: DisplayLoop) async {
         for await frame in stream.frames {
             if Task.isCancelled { return }
+            loop.latest = frame
+            if loop.frozen != nil { continue }
             let diff = FrameDiff(image: frame.image)
             let changes = diff.changes(since: loop.previous)
             loop.previous = diff
             let observation = loop.detector.observe(changes)
-            if observation.verdict == .changed, overlay.state.status != .updateDetected {
-                overlay.state.status = .updateDetected
+            if observation.verdict == .changed, loop.overlay.state.status != .updateDetected {
+                loop.overlay.state.status = .updateDetected
             }
             if !observation.moved.isEmpty {
                 // Patches over what moved come off at once; the rest stay until the next pass lands.
-                overlay.hide { observation.moved.intersects(Self.pixelFrame(of: $0, scale: frame.scale)) }
+                loop.overlay.hide { observation.moved.intersects(Self.pixelFrame(of: $0, scale: frame.scale)) }
                 loop.stale?.formUnion(observation.moved)
                 if let stale = loop.stale, stale.fraction >= Self.restartFraction {
                     loop.pass?.cancel()
@@ -131,23 +209,29 @@ final class LiveTranslationController {
             if observation.verdict == .settled {
                 loop.pending = frame
             }
-            if loop.pass == nil, let settled = loop.pending {
-                loop.pending = nil
-                loop.stale = CellMask.none(like: changes)
-                overlay.state.status = .processing
-                loop.pass = Task { [weak self] in
-                    let outcome = await self?.process(settled, screen: screen, overlay: overlay, loop: loop)
-                    loop.pass = nil
-                    loop.stale = nil
-                    // An abandoned pass leaves the badge on the change that abandoned it, and a
-                    // pending frame means the next pass is about to start.
-                    guard loop.pending == nil, let self, let outcome else { return }
-                    switch outcome {
-                    case .translated: overlay.state.status = .done
-                    case .nothing: overlay.state.status = .noSource(Translator.name(of: self.translator.source))
-                    case .abandoned: break
-                    }
-                }
+            startPendingPass(loop)
+        }
+    }
+
+    /// Starts the pass on the waiting frame, if there is one and none is running.
+    private func startPendingPass(_ loop: DisplayLoop) {
+        guard loop.pass == nil, let frame = loop.pending else { return }
+        loop.pending = nil
+        loop.passFrame = frame
+        // Nothing moves under a frozen frame.
+        loop.stale = loop.frozen == nil ? CellMask.none(for: frame.image) : nil
+        loop.overlay.state.status = .processing
+        loop.pass = Task { [weak self] in
+            let outcome = await self?.process(frame, loop: loop)
+            loop.pass = nil
+            loop.stale = nil
+            // An abandoned pass leaves the badge on the change that abandoned it, and a
+            // pending frame means the next pass is about to start.
+            guard loop.pending == nil, let self, let outcome else { return }
+            switch outcome {
+            case .translated: loop.overlay.state.status = .done
+            case .nothing: loop.overlay.state.status = .noSource(Translator.name(of: self.translator.source))
+            case .abandoned: break
             }
         }
     }
@@ -162,8 +246,9 @@ final class LiveTranslationController {
     /// The quick reading first, shown as soon as it's in, then the corrected reading, which
     /// matters more than usual here: shared-screen video is compressed and blurry. Patches over
     /// screen that moved meanwhile are held back; the pass waiting behind this one replaces them.
-    private func process(_ frame: ScreenStream.Frame, screen: NSScreen, overlay: LiveOverlayController, loop: DisplayLoop) async -> Outcome {
+    private func process(_ frame: ScreenStream.Frame, loop: DisplayLoop) async -> Outcome {
         let started = ContinuousClock.now
+        let overlay = loop.overlay
         let image = frame.image
         let size = CGSize(width: image.width, height: image.height)
         let languages = translator.recognitionLanguages
@@ -174,7 +259,7 @@ final class LiveTranslationController {
         else { return .abandoned }
         let rules = RuleDetector(image: image)
         let blocks = BlockGrouper.group(quickLines, source: script, hasRule: rules.hasRule)
-        let shot = Shot(image: image, screenRect: screen.frame, blocks: blocks, source: translator.source, target: translator.target)
+        let shot = Shot(image: image, screenRect: loop.screen.frame, blocks: blocks, source: translator.source, target: translator.target)
         let model = translator.activeModel
         shot.displayedModel = model
         let hits = fillFromCache(shot, model: model)

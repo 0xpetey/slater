@@ -56,6 +56,12 @@ struct CellMask: Equatable, Sendable {
         CellMask(cells: Array(repeating: false, count: other.cells.count), columns: other.columns, rows: other.rows)
     }
 
+    /// Nothing marked, in the layout `FrameDiff` gives `image`.
+    static func none(for image: CGImage) -> CellMask {
+        let columns = max(1, image.width / FrameDiff.cell), rows = max(1, image.height / FrameDiff.cell)
+        return CellMask(cells: Array(repeating: false, count: columns * rows), columns: columns, rows: rows)
+    }
+
     var count: Int { cells.count { $0 } }
     var isEmpty: Bool { !cells.contains(true) }
     /// The share of the frame marked.

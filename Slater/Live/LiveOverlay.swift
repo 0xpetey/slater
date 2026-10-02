@@ -51,6 +51,10 @@ final class LiveOverlayState {
     var hiddenPatches: Set<Int> = []
     /// The first frame always reads as a change, so this is right from the start.
     var status: LiveStatus = .updateDetected
+    /// The frame the display is held at while frozen, shown in place of the live screen.
+    var frozenImage: CGImage?
+    /// How to resume, for the badge.
+    var frozenHint: String?
 }
 
 /// A transparent, click-through panel over one display carrying the live patches and the
@@ -96,12 +100,26 @@ final class LiveOverlayController {
         state.hiddenPatches = []
     }
 
+    /// Holds the display at `image`. The panel takes the mouse meanwhile: a click on a frozen
+    /// picture of the screen must not land on whatever is under it now.
+    func freeze(_ image: CGImage, hint: String?) {
+        state.frozenImage = image
+        state.frozenHint = hint
+        panel.ignoresMouseEvents = false
+    }
+
+    func unfreeze() {
+        state.frozenImage = nil
+        panel.ignoresMouseEvents = true
+    }
+
     func close() {
         panel.orderOut(nil)
     }
 }
 
-/// The patches of the latest pass, over nothing: the live screen shows through. The status
+/// The patches of the latest pass, over nothing: the live screen shows through, unless the
+/// display is frozen, when the held frame shows instead, inside a blue border. The status
 /// badge stays in the corner whatever the pass found.
 struct LiveOverlayView: View {
     let state: LiveOverlayState
@@ -109,7 +127,20 @@ struct LiveOverlayView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            Color.clear
+            if let frozen = state.frozenImage {
+                Image(decorative: frozen, scale: 1)
+                    .resizable()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // The real menu bar is translucent; the captured one would show through it.
+                    .mask {
+                        VStack(spacing: 0) {
+                            Color.clear.frame(height: insets.top)
+                            Color.black
+                        }
+                    }
+            } else {
+                Color.clear
+            }
             if let shot = state.shot {
                 ForEach(shot.patches) { patch in
                     if !state.hiddenPatches.contains(patch.index), let slot = shot.slot(for: patch.index) {
@@ -119,7 +150,12 @@ struct LiveOverlayView: View {
                     }
                 }
             }
-            LiveStatusBadge(status: state.status)
+            if state.frozenImage != nil {
+                Rectangle()
+                    .strokeBorder(.cyan.opacity(0.8), lineWidth: 6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            LiveStatusBadge(status: state.status, frozenHint: state.frozenImage == nil ? nil : (state.frozenHint ?? ""))
                 .padding(.top, insets.top + 16)
                 .padding(.trailing, insets.trailing + 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
@@ -129,11 +165,27 @@ struct LiveOverlayView: View {
 }
 
 /// A large icon with the status spelled out under it, readable from across a video call.
+/// While frozen, a snowflake strip says so, with the way to resume.
 struct LiveStatusBadge: View {
     let status: LiveStatus
+    /// Nil while live; while frozen, the resume hint (possibly empty).
+    let frozenHint: String?
 
     var body: some View {
         VStack(spacing: 8) {
+            if let frozenHint {
+                HStack(spacing: 5) {
+                    Image(systemName: "snowflake")
+                    Text("Frozen")
+                }
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.cyan)
+                if !frozenHint.isEmpty {
+                    Text(frozenHint)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
             Image(systemName: status.symbol)
                 .font(.system(size: 44, weight: .medium))
                 .foregroundStyle(status.color)
@@ -156,5 +208,6 @@ struct LiveStatusBadge: View {
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(.white.opacity(0.15)))
         .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
         .animation(.default, value: status)
+        .animation(.default, value: frozenHint)
     }
 }

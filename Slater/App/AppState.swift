@@ -32,7 +32,8 @@ final class AppState {
     func start() {
         hotkeys = HotkeyManager(
             onTakeShot: { [weak self] in self?.takeShot() },
-            onToggleLiveTranslation: { [weak self] in self?.toggleLiveTranslation() }
+            onToggleLiveTranslation: { [weak self] in self?.toggleLiveTranslation() },
+            onFreezeLiveTranslation: { [weak self] in self?.live.toggleFreeze() }
         )
         Task {
             await translator.refresh()
