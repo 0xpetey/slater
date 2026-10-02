@@ -1,4 +1,5 @@
 import AppKit
+@preconcurrency import KeyboardShortcuts
 import SwiftUI
 import Symbols
 
@@ -64,14 +65,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         iconView.removeSymbolEffect(ofType: .rotate)
     }
 
-    /// Rebuilt each time it opens, so the Open Shots list is current.
+    /// Rebuilt each time it opens, so the Open Shots list and the hotkeys are current.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        menu.addItem(item("Take Shot", #selector(takeShot)))
-        menu.addItem(item("Take Shot of Front Window", #selector(takeWindowShot)))
-        menu.addItem(item(appState.live.isRunning ? "Stop Live Translation" : "Start Live Translation", #selector(toggleLiveTranslation)))
+        menu.addItem(item("Take Shot", #selector(takeShot), hotkey: .takeShot))
+        menu.addItem(item("Take Shot of Front Window", #selector(takeWindowShot), hotkey: .takeWindowShot))
+        menu.addItem(item(
+            appState.live.isRunning ? "Stop Live Translation" : "Start Live Translation",
+            #selector(toggleLiveTranslation), hotkey: .toggleLiveTranslation
+        ))
         if appState.live.isRunning {
-            menu.addItem(item(appState.live.isFrozen ? "Unfreeze Screen" : "Freeze Screen", #selector(toggleFreeze)))
+            menu.addItem(item(
+                appState.live.isFrozen ? "Unfreeze Screen" : "Freeze Screen",
+                #selector(toggleFreeze), hotkey: .freezeLiveTranslation
+            ))
         }
         if !appState.isReady {
             menu.addItem(item("Finish Setup…", #selector(finishSetup)))
@@ -97,9 +104,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(item("Quit Slater", #selector(quit), key: "q"))
     }
 
-    private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
+    /// `key` is a fixed ⌘ key; `hotkey` is one the user can rebind in Settings, shown as it is
+    /// bound now. The menu is rebuilt on each open, so the item reads the binding once rather than
+    /// observing it with `setShortcut(for:)`, whose observer keeps every discarded item alive.
+    private func item(_ title: String, _ action: Selector, key: String = "", hotkey: KeyboardShortcuts.Name? = nil) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
+        if let hotkey {
+            item.setShortcut(hotkey.shortcut)
+        }
         return item
     }
 
