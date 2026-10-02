@@ -57,4 +57,25 @@ struct StatusItemTests {
             }
         }
     }
+
+    /// Settings… puts a Settings window on screen. The status menu used to send SwiftUI the
+    /// `showSettingsWindow:` selector, which macOS 26 still accepts but answers with no window,
+    /// so this opens Settings the way the menu does and waits for the window.
+    @Test @MainActor func settingsItemOpensTheSettingsWindow() async throws {
+        func settingsWindow() -> NSWindow? {
+            NSApp.windows.first { $0.isVisible && $0.title == "Slater Settings" }
+        }
+        try #require(settingsWindow() == nil, "no Settings window is open before the test")
+        let controller = StatusItemController(appState: AppState())
+        controller.openSettings()
+        // SwiftUI makes the scene's window over the next few turns of the run loop.
+        let deadline = ContinuousClock.now + .seconds(3)
+        var window = settingsWindow()
+        while window == nil, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+            window = settingsWindow()
+        }
+        let opened = try #require(window, "a Settings window is on screen within 3 s")
+        opened.close()
+    }
 }
