@@ -52,8 +52,7 @@ final class LiveTranslationController {
         }
         overlays = overlaysByDisplay.values.map(\.1)
         do {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            let slater = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
+            let (content, slater) = try await ScreenCapturer.contentListingSlater()
             guard !slater.isEmpty else { throw LiveError.notListed }
             for display in content.displays {
                 guard let (screen, overlay) = overlaysByDisplay[display.displayID] else { continue }
@@ -118,6 +117,9 @@ final class LiveTranslationController {
             let changes = diff.changes(since: loop.previous)
             loop.previous = diff
             let observation = loop.detector.observe(changes)
+            if observation.verdict == .changed, overlay.state.status != .updateDetected {
+                overlay.state.status = .updateDetected
+            }
             if !observation.moved.isEmpty {
                 // Patches over what moved come off at once; the rest stay until the next pass lands.
                 overlay.hide { observation.moved.intersects(Self.pixelFrame(of: $0, scale: frame.scale)) }
@@ -126,25 +128,41 @@ final class LiveTranslationController {
                     loop.pass?.cancel()
                 }
             }
-            if observation.settled {
+            if observation.verdict == .settled {
                 loop.pending = frame
             }
             if loop.pass == nil, let settled = loop.pending {
                 loop.pending = nil
                 loop.stale = CellMask.none(like: changes)
+                overlay.state.status = .processing
                 loop.pass = Task { [weak self] in
-                    await self?.process(settled, screen: screen, overlay: overlay, loop: loop)
+                    let outcome = await self?.process(settled, screen: screen, overlay: overlay, loop: loop)
                     loop.pass = nil
                     loop.stale = nil
+                    // An abandoned pass leaves the badge on the change that abandoned it, and a
+                    // pending frame means the next pass is about to start.
+                    guard loop.pending == nil, let self, let outcome else { return }
+                    switch outcome {
+                    case .translated: overlay.state.status = .done
+                    case .nothing: overlay.state.status = .noSource(Translator.name(of: self.translator.source))
+                    case .abandoned: break
+                    }
                 }
             }
         }
     }
 
+    private enum Outcome {
+        case translated
+        /// No text in the source language on screen.
+        case nothing
+        case abandoned
+    }
+
     /// The quick reading first, shown as soon as it's in, then the corrected reading, which
     /// matters more than usual here: shared-screen video is compressed and blurry. Patches over
     /// screen that moved meanwhile are held back; the pass waiting behind this one replaces them.
-    private func process(_ frame: ScreenStream.Frame, screen: NSScreen, overlay: LiveOverlayController, loop: DisplayLoop) async {
+    private func process(_ frame: ScreenStream.Frame, screen: NSScreen, overlay: LiveOverlayController, loop: DisplayLoop) async -> Outcome {
         let started = ContinuousClock.now
         let image = frame.image
         let size = CGSize(width: image.width, height: image.height)
@@ -153,7 +171,7 @@ final class LiveTranslationController {
         let ocrImage = frame.scale >= 2 ? ImagePreprocessor.scaled(image, by: 0.5) : image
         guard let quickLines = try? await TextRecognizer.recognize(ocrImage, boundsSize: size, languageCorrection: false, languages: languages),
               !Task.isCancelled
-        else { return }
+        else { return .abandoned }
         let rules = RuleDetector(image: image)
         let blocks = BlockGrouper.group(quickLines, source: script, hasRule: rules.hasRule)
         let shot = Shot(image: image, screenRect: screen.frame, blocks: blocks, source: translator.source, target: translator.target)
@@ -171,7 +189,7 @@ final class LiveTranslationController {
               !Task.isCancelled
         else {
             logger.notice("Live pass: \(quickLines.count) lines, \(shot.sourceBlockIndices.count) to translate (\(hits) cached), \(quickMilliseconds) ms; abandoned before the corrected reading")
-            return
+            return .abandoned
         }
         let correctedBlocks = BlockGrouper.group(TextReader.reconcile(quick: quickLines, corrected: correctedLines), source: script, hasRule: rules.hasRule)
         let quickTexts = Set(blocks.map(\.text))
@@ -185,6 +203,7 @@ final class LiveTranslationController {
         let totalMilliseconds = milliseconds(since: started)
         // Counts and timings only, never text (ADR 0001).
         logger.notice("Live pass: \(quickLines.count) lines, \(shot.sourceBlockIndices.count) to translate (\(hits) cached), quick \(quickMilliseconds) ms, corrected \(totalMilliseconds) ms, \(changed) blocks changed")
+        return shot.sourceBlockIndices.isEmpty ? .nothing : .translated
     }
 
     /// A patch's frame in the captured image's pixels.

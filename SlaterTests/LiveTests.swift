@@ -24,21 +24,21 @@ struct ChangeDetectorTests {
 
     @Test func aSlideChangeIsReadOnTheFirstQuietFrame() {
         var detector = ChangeDetector(framesPerSecond: 2)
-        #expect(detector.observe(mask()) == .init(settled: false, moved: mask()))
+        #expect(detector.observe(mask()) == .init(verdict: .quiet, moved: mask()))
         let observation = detector.observe(slide)
-        #expect(!observation.settled)
+        #expect(observation.verdict == .changed)
         #expect(observation.moved.cells[5 * columns + 10] && !observation.moved.cells[0])
-        #expect(detector.observe(mask()).settled)
-        #expect(!detector.observe(mask()).settled)
+        #expect(detector.observe(mask()).verdict == .settled)
+        #expect(detector.observe(mask()).verdict == .quiet)
     }
 
     @Test func aTransitionWaitsUntilItStops() {
         var detector = ChangeDetector(framesPerSecond: 2)
         _ = detector.observe(mask())
         for _ in 0..<2 {
-            #expect(!detector.observe(slide).settled)
+            #expect(detector.observe(slide).verdict == .changed)
         }
-        #expect(detector.observe(mask()).settled)
+        #expect(detector.observe(mask()).verdict == .settled)
     }
 
     @Test func videoStopsCountingButStillMarksStalePatches() {
@@ -48,15 +48,15 @@ struct ChangeDetectorTests {
         var settled = 0
         for _ in 0..<10 {
             let observation = detector.observe(tile)
-            if observation.settled { settled += 1 }
+            if observation.verdict == .settled { settled += 1 }
             #expect(observation.moved == tile)
         }
         #expect(settled == 1)
         // A bullet appearing elsewhere still counts while the tile keeps moving.
         let observation = detector.observe(union(tile, bullet))
-        #expect(!observation.settled)
+        #expect(observation.verdict == .changed)
         #expect(observation.moved == union(tile, bullet))
-        #expect(detector.observe(tile).settled)
+        #expect(detector.observe(tile).verdict == .settled)
     }
 
     @Test func aCameraTileStaysVideoThroughAStillMoment() {
@@ -64,9 +64,9 @@ struct ChangeDetectorTests {
         _ = detector.observe(mask())
         for _ in 0..<60 { _ = detector.observe(tile) }
         // Ten seconds of stillness, then movement again: nothing to read.
-        for _ in 0..<20 { #expect(!detector.observe(mask()).settled) }
-        #expect(!detector.observe(tile).settled)
-        #expect(!detector.observe(mask()).settled)
+        for _ in 0..<20 { #expect(detector.observe(mask()).verdict == .quiet) }
+        #expect(detector.observe(tile).verdict == .quiet)
+        #expect(detector.observe(mask()).verdict == .quiet)
     }
 
     @Test func aLongScrollIsReadSoonAfterItStops() {
@@ -74,17 +74,17 @@ struct ChangeDetectorTests {
         _ = detector.observe(mask())
         // Scrolling for ten frames: read once when it turns into video, then ignored.
         var passes = 0
-        for _ in 0..<10 where detector.observe(slide).settled { passes += 1 }
+        for _ in 0..<10 where detector.observe(slide).verdict == .settled { passes += 1 }
         #expect(passes == 1)
         // Once it stops, the final position is read within a few seconds.
         var settledAfter: Int?
-        for quietFrame in 1...30 where detector.observe(mask()).settled {
+        for quietFrame in 1...30 where detector.observe(mask()).verdict == .settled {
             settledAfter = quietFrame
             break
         }
         #expect(settledAfter.map { $0 <= 10 } == true)
         // And only once.
-        for _ in 0..<30 { #expect(!detector.observe(mask()).settled) }
+        for _ in 0..<30 { #expect(detector.observe(mask()).verdict == .quiet) }
     }
 
     @Test func scatteredNoiseAndTinyChangesAreQuiet() {
@@ -92,11 +92,20 @@ struct ChangeDetectorTests {
         _ = detector.observe(mask())
         // A caret or a clock: one cell, which doesn't even mark a patch stale.
         let caret = detector.observe(mask(rows: 3..<4, columns: 7..<8))
-        #expect(caret == .init(settled: false, moved: mask()))
+        #expect(caret == .init(verdict: .quiet, moved: mask()))
         // Capture noise: many cells, none next to each other.
         let noise = CellMask(cells: (0..<(columns * rows)).map { $0 % 7 == 0 && ($0 / columns) % 2 == 0 }, columns: columns, rows: rows)
-        #expect(detector.observe(noise) == .init(settled: false, moved: mask()))
-        #expect(!detector.observe(mask()).settled)
+        #expect(detector.observe(noise) == .init(verdict: .quiet, moved: mask()))
+        #expect(detector.observe(mask()).verdict == .quiet)
+    }
+}
+
+struct LiveStatusTests {
+    @Test func captionsNameTheSourceLanguage() {
+        #expect(LiveStatus.noSource("Japanese").caption == "No Japanese Detected")
+        #expect(LiveStatus.updateDetected.caption == "Screen Update Detected")
+        #expect(LiveStatus.processing.caption == "Processing")
+        #expect(LiveStatus.done.caption == "Done")
     }
 }
 

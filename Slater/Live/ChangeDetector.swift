@@ -6,8 +6,15 @@ import Foundation
 /// must, and the pass should wait for the slide's transition to settle.
 struct ChangeDetector {
     struct Observation: Equatable {
-        /// The screen has settled after a change worth reading: time for a pass.
-        var settled: Bool
+        enum Verdict {
+            case quiet
+            /// A change worth reading is under way.
+            case changed
+            /// The screen has settled after one: the frame to read.
+            case settled
+        }
+
+        var verdict: Verdict
         /// Cells whose content moved this frame, in text-sized clusters or as video. Patches
         /// over them are stale.
         var moved: CellMask
@@ -76,7 +83,7 @@ struct ChangeDetector {
 
         if significant.fraction >= Self.significantFraction {
             isPending = true
-            return Observation(settled: false, moved: moved)
+            return Observation(verdict: .changed, moved: moved)
         }
         if isPending {
             isPending = false
@@ -85,11 +92,11 @@ struct ChangeDetector {
         if stopped.clustered().fraction >= Self.significantFraction {
             return settle(moved: moved)
         }
-        return Observation(settled: false, moved: moved)
+        return Observation(verdict: .quiet, moved: moved)
     }
 
     private mutating func settle(moved: CellMask) -> Observation {
         for index in movedAsVideo.indices { movedAsVideo[index] = false }
-        return Observation(settled: true, moved: moved)
+        return Observation(verdict: .settled, moved: moved)
     }
 }
