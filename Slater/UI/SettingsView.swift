@@ -13,6 +13,7 @@ struct SettingsView: View {
             KeyboardShortcuts.Recorder("Take Shot:", name: .takeShot)
             KeyboardShortcuts.Recorder("Shot of Front Window:", name: .takeWindowShot)
             KeyboardShortcuts.Recorder("Live Translation:", name: .toggleLiveTranslation)
+            KeyboardShortcuts.Recorder("Live Translation of Front Window:", name: .toggleLiveWindowTranslation)
             KeyboardShortcuts.Recorder("Freeze Live Screen:", name: .freezeLiveTranslation)
             Toggle("Open Slater when you log in", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, enabled in

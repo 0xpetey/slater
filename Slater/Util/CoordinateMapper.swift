@@ -22,4 +22,15 @@ enum CoordinateMapper {
     static func globalRect(forLocalRect rect: CGRect, screenFrame: CGRect) -> CGRect {
         rect.offsetBy(dx: screenFrame.minX, dy: screenFrame.minY)
     }
+
+    /// The same rect measured from the screen's top-left corner, as views lay out.
+    static func topLeftRect(forLocalRect rect: CGRect, screenHeight: CGFloat) -> CGRect {
+        CGRect(x: rect.minX, y: screenHeight - rect.maxY, width: rect.width, height: rect.height)
+    }
+
+    /// Between global AppKit points and the window server's coordinates (`kCGWindowBounds`),
+    /// whose origin is the main screen's top-left corner with y down: the same flip either way.
+    static func flippedGlobalRect(_ rect: CGRect, mainScreenHeight: CGFloat) -> CGRect {
+        CGRect(x: rect.minX, y: mainScreenHeight - rect.maxY, width: rect.width, height: rect.height)
+    }
 }

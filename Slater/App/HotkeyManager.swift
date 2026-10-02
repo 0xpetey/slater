@@ -10,6 +10,9 @@ extension KeyboardShortcuts.Name {
     static let toggleLiveTranslation = Self("toggleLiveTranslation", default: .init(.five, modifiers: [.option, .shift]))
     /// ⌥⇧6, next to that: holds the live screen, and its patches, so it can be read.
     static let freezeLiveTranslation = Self("freezeLiveTranslation", default: .init(.six, modifiers: [.option, .shift]))
+    /// ⌥⇧7, the next key along: live translation of the front window only. ⌥⇧2 would sit
+    /// next to the window Shot, but it types € on a US keyboard.
+    static let toggleLiveWindowTranslation = Self("toggleLiveWindowTranslation", default: .init(.seven, modifiers: [.option, .shift]))
 }
 
 @MainActor
@@ -18,6 +21,7 @@ final class HotkeyManager {
         onTakeShot: @escaping @MainActor () -> Void,
         onTakeWindowShot: @escaping @MainActor () -> Void,
         onToggleLiveTranslation: @escaping @MainActor () -> Void,
+        onToggleLiveWindowTranslation: @escaping @MainActor () -> Void,
         onFreezeLiveTranslation: @escaping @MainActor () -> Void
     ) {
         KeyboardShortcuts.onKeyDown(for: .takeShot) {
@@ -28,6 +32,9 @@ final class HotkeyManager {
         }
         KeyboardShortcuts.onKeyDown(for: .toggleLiveTranslation) {
             MainActor.assumeIsolated { onToggleLiveTranslation() }
+        }
+        KeyboardShortcuts.onKeyDown(for: .toggleLiveWindowTranslation) {
+            MainActor.assumeIsolated { onToggleLiveWindowTranslation() }
         }
         KeyboardShortcuts.onKeyDown(for: .freezeLiveTranslation) {
             MainActor.assumeIsolated { onFreezeLiveTranslation() }

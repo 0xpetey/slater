@@ -70,11 +70,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         menu.addItem(item("Take Shot", #selector(takeShot), hotkey: .takeShot))
         menu.addItem(item("Take Shot of Front Window", #selector(takeWindowShot), hotkey: .takeWindowShot))
+        let live = appState.live
         menu.addItem(item(
-            appState.live.isRunning ? "Stop Live Translation" : "Start Live Translation",
+            live.isRunning && !live.scope.isWindow ? "Stop Live Translation" : "Start Live Translation",
             #selector(toggleLiveTranslation), hotkey: .toggleLiveTranslation
         ))
-        if appState.live.isRunning {
+        menu.addItem(item(
+            live.isRunning && live.scope.isWindow ? "Stop Live Translation of Front Window" : "Start Live Translation of Front Window",
+            #selector(toggleLiveWindowTranslation), hotkey: .toggleLiveWindowTranslation
+        ))
+        if live.isRunning {
             menu.addItem(item(
                 appState.live.isFrozen ? "Unfreeze Screen" : "Freeze Screen",
                 #selector(toggleFreeze), hotkey: .freezeLiveTranslation
@@ -126,6 +131,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func toggleLiveTranslation() {
         appState.toggleLiveTranslation()
+    }
+
+    @objc private func toggleLiveWindowTranslation() {
+        appState.toggleLiveWindowTranslation()
     }
 
     @objc private func toggleFreeze() {

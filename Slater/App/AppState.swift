@@ -34,6 +34,7 @@ final class AppState {
             onTakeShot: { [weak self] in self?.takeShot() },
             onTakeWindowShot: { [weak self] in self?.takeWindowShot() },
             onToggleLiveTranslation: { [weak self] in self?.toggleLiveTranslation() },
+            onToggleLiveWindowTranslation: { [weak self] in self?.toggleLiveWindowTranslation() },
             onFreezeLiveTranslation: { [weak self] in self?.live.toggleFreeze() }
         )
         Task {
@@ -68,14 +69,34 @@ final class AppState {
         permissions.hasScreenRecording && translator.hasInstalledModel
     }
 
+    /// Live translation of every display: stops it if that's running, or takes over from a window.
     func toggleLiveTranslation() {
         guard isReady else {
             showOnboarding()
             return
         }
-        live.toggle()
+        live.toggle(.screen)
     }
 
+    /// Live translation of the front window, the one a Shot of Front Window would take: stops
+    /// it if a window is live, or takes over from the whole screen.
+    func toggleLiveWindowTranslation() {
+        guard isReady else {
+            showOnboarding()
+            return
+        }
+        if live.isRunning, live.scope.isWindow {
+            live.stop()
+            return
+        }
+        guard let window = FrontWindow.front() else {
+            NoticePanel.show("No window in front")
+            return
+        }
+        live.toggle(.window(window.id))
+    }
+
+    /// Takes over from live translation, if it's running.
     func takeShot() {
         guard !isTakingShot else { return }
         permissions.refresh()
@@ -83,6 +104,7 @@ final class AppState {
             showOnboarding()
             return
         }
+        live.stop()
         isTakingShot = true
         translator.warmUp()
         let pressed = ContinuousClock.now
@@ -96,7 +118,8 @@ final class AppState {
         }
     }
 
-    /// A Shot of the front window, with no box to draw.
+    /// A Shot of the front window, with no box to draw. Takes over from live translation, if
+    /// it's running.
     func takeWindowShot() {
         guard !isTakingShot else { return }
         permissions.refresh()
@@ -104,6 +127,7 @@ final class AppState {
             showOnboarding()
             return
         }
+        live.stop()
         guard let selection = FrontWindow.selection() else {
             NoticePanel.show("No window in front")
             return

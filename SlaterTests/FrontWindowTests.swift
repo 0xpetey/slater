@@ -27,4 +27,14 @@ struct FrontWindowTests {
     @Test func aWindowOffEveryScreenIsNothing() {
         #expect(FrontWindow.selection(forWindowBounds: CGRect(x: 5000, y: 0, width: 300, height: 300), screens: screens) == nil)
     }
+
+    /// Live translation finds its window again by number on every frame.
+    @Test @MainActor func theFrontWindowIsFoundAgainByItsNumber() throws {
+        // A bare machine may have no ordinary window on screen at all.
+        guard let window = FrontWindow.front() else { return }
+        let located = try #require(FrontWindow.locate(window.id))
+        #expect(located.bounds == window.bounds)
+        #expect(located.isOnScreen)
+        #expect(FrontWindow.locate(kCGNullWindowID) == nil)
+    }
 }

@@ -12,7 +12,7 @@ struct StatusItemTests {
     }
 
     /// Each item for a rebindable hotkey shows that hotkey as it is bound now, which is the
-    /// default (⌥⇧4, ⌥⇧3, ⌥⇧5) unless this Mac's user has changed it in Settings.
+    /// default (⌥⇧4, ⌥⇧3, ⌥⇧5, ⌥⇧7) unless this Mac's user has changed it in Settings.
     @Test @MainActor func menuItemsShowTheirHotkeys() throws {
         let menu = NSMenu()
         StatusItemController(appState: AppState()).menuNeedsUpdate(menu)
@@ -20,6 +20,7 @@ struct StatusItemTests {
             ("Take Shot", .takeShot),
             ("Take Shot of Front Window", .takeWindowShot),
             ("Start Live Translation", .toggleLiveTranslation),
+            ("Start Live Translation of Front Window", .toggleLiveWindowTranslation),
         ]
         for (title, hotkey) in bound {
             let item = try #require(menu.item(withTitle: title), "\(title)")
