@@ -9,9 +9,8 @@ struct FrameDiff: Sendable {
     static let cell = 16
     /// How far a thumbnail pixel must move, out of 255, to count as changed.
     static let threshold = 24
-    private static let context = CIContext()
 
-    /// Grayscale thumbnail, row-major, `columns × rows`.
+    /// Grayscale thumbnail, row-major, `columns × rows`, row 0 at the top.
     let pixels: [UInt8]
     let columns: Int
     let rows: Int
@@ -33,33 +32,72 @@ struct FrameDiff: Sendable {
         self.pixels = pixels
     }
 
-    /// The thumbnail pixels that differ from `previous`, as a mask in the same layout, and the
-    /// share of the frame they cover.
-    func changes(since previous: FrameDiff?) -> (mask: [Bool], fraction: Double) {
+    /// The thumbnail pixels that differ from `previous`. Everything, if there is no comparable
+    /// previous frame.
+    func changes(since previous: FrameDiff?) -> CellMask {
         guard let previous, previous.columns == columns, previous.rows == rows else {
-            return (Array(repeating: true, count: pixels.count), 1)
+            return CellMask(cells: Array(repeating: true, count: pixels.count), columns: columns, rows: rows)
         }
-        var mask = [Bool](repeating: false, count: pixels.count)
-        var changed = 0
+        var cells = [Bool](repeating: false, count: pixels.count)
         for index in pixels.indices where abs(Int(pixels[index]) - Int(previous.pixels[index])) > Self.threshold {
-            mask[index] = true
-            changed += 1
+            cells[index] = true
         }
-        return (mask, Double(changed) / Double(pixels.count))
+        return CellMask(cells: cells, columns: columns, rows: rows)
+    }
+}
+
+/// A yes or no per thumbnail cell, in `FrameDiff`'s layout.
+struct CellMask: Equatable, Sendable {
+    var cells: [Bool]
+    let columns: Int
+    let rows: Int
+
+    static func none(like other: CellMask) -> CellMask {
+        CellMask(cells: Array(repeating: false, count: other.cells.count), columns: other.columns, rows: other.rows)
     }
 
-    /// Whether any changed thumbnail pixel lies within `frame`, given in the image's pixels
-    /// with a top-left origin (the thumbnail is drawn bottom-up, so rows are flipped).
-    static func mask(_ mask: [Bool], columns: Int, rows: Int, intersects frame: CGRect) -> Bool {
+    var count: Int { cells.count { $0 } }
+    var isEmpty: Bool { !cells.contains(true) }
+    /// The share of the frame marked.
+    var fraction: Double { Double(count) / Double(max(1, cells.count)) }
+
+    mutating func formUnion(_ other: CellMask) {
+        guard other.cells.count == cells.count else { return }
+        for index in cells.indices where other.cells[index] {
+            cells[index] = true
+        }
+    }
+
+    /// Whether any marked cell lies within `frame`, given in the image's pixels with a top-left
+    /// origin, like the thumbnail.
+    func intersects(_ frame: CGRect) -> Bool {
+        let cell = FrameDiff.cell
         let minColumn = max(0, Int(frame.minX) / cell), maxColumn = min(columns - 1, Int(frame.maxX) / cell)
         let minRow = max(0, Int(frame.minY) / cell), maxRow = min(rows - 1, Int(frame.maxY) / cell)
         guard minColumn <= maxColumn, minRow <= maxRow else { return false }
         for row in minRow...maxRow {
-            let flippedRow = rows - 1 - row
-            for column in minColumn...maxColumn where mask[flippedRow * columns + column] {
+            for column in minColumn...maxColumn where cells[row * columns + column] {
                 return true
             }
         }
         return false
+    }
+
+    /// The marked cells with at least two marked neighbors. Text comes in clusters; capture
+    /// noise, a caret or a clock's digit is a cell or two on its own.
+    func clustered() -> CellMask {
+        var result = CellMask.none(like: self)
+        for index in cells.indices where cells[index] {
+            let row = index / columns, column = index % columns
+            var neighbors = 0
+            for dr in -1...1 {
+                for dc in -1...1 where dr != 0 || dc != 0 {
+                    let r = row + dr, c = column + dc
+                    if r >= 0, r < rows, c >= 0, c < columns, cells[r * columns + c] { neighbors += 1 }
+                }
+            }
+            if neighbors >= 2 { result.cells[index] = true }
+        }
+        return result
     }
 }

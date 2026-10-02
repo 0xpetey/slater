@@ -32,9 +32,10 @@ final class LiveOverlayController {
         panel.orderFrontRegardless()
     }
 
-    func show(_ shot: Shot) {
+    /// Shows a pass's patches, except those over screen that changed since the pass read it.
+    func show(_ shot: Shot, hiding stale: (Patch) -> Bool) {
         state.shot = shot
-        state.hiddenPatches = []
+        state.hiddenPatches = Set(shot.patches.filter(stale).map(\.index))
     }
 
     /// Hides the patches whose screen area changed, keeping the rest until the next pass lands.
