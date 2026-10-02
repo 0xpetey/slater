@@ -32,6 +32,7 @@ final class AppState {
     func start() {
         hotkeys = HotkeyManager(
             onTakeShot: { [weak self] in self?.takeShot() },
+            onTakeWindowShot: { [weak self] in self?.takeWindowShot() },
             onToggleLiveTranslation: { [weak self] in self?.toggleLiveTranslation() },
             onFreezeLiveTranslation: { [weak self] in self?.live.toggleFreeze() }
         )
@@ -95,6 +96,33 @@ final class AppState {
         }
     }
 
+    /// A Shot of the front window, with no box to draw.
+    func takeWindowShot() {
+        guard !isTakingShot else { return }
+        permissions.refresh()
+        guard isReady else {
+            showOnboarding()
+            return
+        }
+        guard let selection = FrontWindow.selection() else {
+            NoticePanel.show("No window in front")
+            return
+        }
+        isTakingShot = true
+        translator.warmUp()
+        let pressed = ContinuousClock.now
+        Task {
+            defer { isTakingShot = false }
+            do {
+                let captures = try await ScreenCapturer.captureAllDisplays()
+                logger.notice("Captured \(captures.count) displays \(milliseconds(since: pressed)) ms after the window hotkey")
+                try await makeShot(of: selection, in: captures)
+            } catch {
+                logger.error("Capture failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
     private func captureAndSelect(pressedAt pressed: ContinuousClock.Instant) async throws {
         // The overlay goes up over the live screen at once; the capture freezes it ~80 ms later.
         selectionOverlay.show()
@@ -109,6 +137,12 @@ final class AppState {
             return
         }
         let captures = try await captureTask.value
+        try await makeShot(of: selection, in: captures)
+    }
+
+    /// Crops the selection out of its display's Capture, reads it twice (ADR 0002) and opens
+    /// the Shot.
+    private func makeShot(of selection: SelectionOverlayController.Selection, in captures: [DisplayCapture]) async throws {
         guard let capture = captures.first(where: { $0.displayID == selection.displayID }) else { return }
 
         let pixelRect = CoordinateMapper.pixelRect(

@@ -68,6 +68,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.addItem(item("Take Shot", #selector(takeShot)))
+        menu.addItem(item("Take Shot of Front Window", #selector(takeWindowShot)))
         menu.addItem(item(appState.live.isRunning ? "Stop Live Translation" : "Start Live Translation", #selector(toggleLiveTranslation)))
         if appState.live.isRunning {
             menu.addItem(item(appState.live.isFrozen ? "Unfreeze Screen" : "Freeze Screen", #selector(toggleFreeze)))
@@ -104,6 +105,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func takeShot() {
         appState.takeShot()
+    }
+
+    @objc private func takeWindowShot() {
+        appState.takeWindowShot()
     }
 
     @objc private func toggleLiveTranslation() {

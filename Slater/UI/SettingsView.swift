@@ -11,6 +11,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             KeyboardShortcuts.Recorder("Take Shot:", name: .takeShot)
+            KeyboardShortcuts.Recorder("Shot of Front Window:", name: .takeWindowShot)
             KeyboardShortcuts.Recorder("Live Translation:", name: .toggleLiveTranslation)
             KeyboardShortcuts.Recorder("Freeze Live Screen:", name: .freezeLiveTranslation)
             Toggle("Open Slater when you log in", isOn: $launchAtLogin)
