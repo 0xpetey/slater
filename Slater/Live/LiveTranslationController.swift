@@ -56,7 +56,11 @@ final class LiveTranslationController {
         var loopsByDisplay: [CGDirectDisplayID: DisplayLoop] = [:]
         for screen in NSScreen.screens {
             guard let displayID = screen.displayID else { continue }
-            loopsByDisplay[displayID] = DisplayLoop(screen: screen, overlay: LiveOverlayController(screen: screen))
+            let overlay = LiveOverlayController(screen: screen)
+            overlay.onClick = { [weak self] in
+                if self?.isFrozen == true { self?.unfreeze() }
+            }
+            loopsByDisplay[displayID] = DisplayLoop(screen: screen, overlay: overlay)
         }
         loops = Array(loopsByDisplay.values)
         do {
@@ -116,7 +120,7 @@ final class LiveTranslationController {
     /// right away instead of waiting for it to settle; or else the last pass's frame.
     private func freeze() {
         isFrozen = true
-        let hint = KeyboardShortcuts.getShortcut(for: .freezeLiveTranslation).map { "\($0) to resume" }
+        let hint = KeyboardShortcuts.getShortcut(for: .freezeLiveTranslation).map { "Click or \($0) to resume" } ?? "Click to resume"
         for loop in loops {
             let frame: ScreenStream.Frame?
             if loop.pass != nil {

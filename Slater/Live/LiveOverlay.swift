@@ -58,10 +58,13 @@ final class LiveOverlayState {
 }
 
 /// A transparent, click-through panel over one display carrying the live patches and the
-/// status badge, so the user keeps working underneath it.
+/// status badge, so the user keeps working underneath it. While frozen it takes the mouse,
+/// and a click unfreezes.
 @MainActor
 final class LiveOverlayController {
     let state = LiveOverlayState()
+    /// Called on a click while frozen.
+    var onClick: (() -> Void)?
     private let panel: NSPanel
 
     init(screen: NSScreen) {
@@ -78,7 +81,9 @@ final class LiveOverlayController {
             top: screen.frame.maxY - screen.visibleFrame.maxY, leading: 0,
             bottom: 0, trailing: screen.frame.maxX - screen.visibleFrame.maxX
         )
-        panel.contentView = NSHostingView(rootView: LiveOverlayView(state: state, insets: insets))
+        let content = ClickableHostingView(rootView: LiveOverlayView(state: state, insets: insets))
+        content.onClick = { [weak self] in self?.onClick?() }
+        panel.contentView = content
         panel.setFrame(screen.frame, display: false)
         panel.orderFrontRegardless()
     }
@@ -101,7 +106,7 @@ final class LiveOverlayController {
     }
 
     /// Holds the display at `image`. The panel takes the mouse meanwhile: a click on a frozen
-    /// picture of the screen must not land on whatever is under it now.
+    /// picture of the screen must not land on whatever is under it now, so it unfreezes instead.
     func freeze(_ image: CGImage, hint: String?) {
         state.frozenImage = image
         state.frozenHint = hint
@@ -115,6 +120,18 @@ final class LiveOverlayController {
 
     func close() {
         panel.orderOut(nil)
+    }
+}
+
+/// Reports clicks, including the first one in a window that isn't key, which is this panel's
+/// normal state.
+private final class ClickableHostingView: NSHostingView<LiveOverlayView> {
+    var onClick: (() -> Void)?
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        onClick?()
     }
 }
 
