@@ -57,6 +57,27 @@ struct TextReaderTests {
         #expect(lines.map(\.isLowConfidence) == [true])
     }
 
+    /// Crashed with an index out of range (2026-10-02, in live translation): the rule that a
+    /// suspected merge loses picked the corrected reading, which had no Line there at all.
+    @Test func aSuspectedMergeInTheOnlyReadingIsKept() {
+        var merged = line("該社", x: 10)
+        merged.hasSuspectedMerge = true
+        let quickOnly = TextReader.reconcile(quick: [merged], corrected: [])
+        #expect(quickOnly.map(\.text) == ["該社"])
+        #expect(quickOnly.map(\.isLowConfidence) == [true])
+        let correctedOnly = TextReader.reconcile(quick: [], corrected: [merged])
+        #expect(correctedOnly.map(\.text) == ["該社"])
+        // And beside a Line both readings found, on another row.
+        let mixed = TextReader.reconcile(quick: [merged, line("資料", x: 10, y: 100)], corrected: [line("資料", x: 10, y: 100)])
+        #expect(mixed.map(\.text) == ["該社", "資料"])
+        #expect(mixed.map(\.isLowConfidence) == [true, false])
+    }
+
+    /// A reading can find a box and no text in it; nothing to choose is still no crash.
+    @Test func aLineWithNoTextInTheOnlyReadingIsKept() {
+        #expect(TextReader.reconcile(quick: [line("", x: 10)], corrected: []).count == 1)
+    }
+
     @Test func sideBySideCellsStaySeparateLines() {
         let lines = TextReader.reconcile(
             quick: [line("品番", x: 10, width: 56), line("数量", x: 200, width: 56)],
