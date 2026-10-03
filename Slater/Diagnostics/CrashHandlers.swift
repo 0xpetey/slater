@@ -5,6 +5,7 @@ import Foundation
 // handler can't take a lock or capture anything.
 nonisolated(unsafe) private var crashLogDescriptor: Int32 = -1
 nonisolated(unsafe) private var sessionMarkerPath: UnsafeMutablePointer<CChar>?
+nonisolated(unsafe) private var previousPreprocessor: objc_exception_preprocessor?
 nonisolated(unsafe) private let frames = UnsafeMutablePointer<UnsafeMutableRawPointer?>.allocate(capacity: 128)
 
 private func writeToLog(_ text: StaticString) {
@@ -12,8 +13,9 @@ private func writeToLog(_ text: StaticString) {
 }
 
 /// Writes what the process can still say about its own death to the log file: the signal and the
-/// crashing thread's backtrace, or an uncaught exception's name, reason and backtrace. macOS's
-/// own crash report is still written, since each handler hands the crash back to the system.
+/// crashing thread's backtrace, and each Objective-C exception's name, reason and backtrace as
+/// it is thrown. macOS's own crash report is still written, since the crash is handed back to
+/// the system.
 enum CrashHandlers {
     private static let crashSignals = [SIGTRAP, SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE]
     /// Asked to quit from outside (`kill`, a rebuild): not a crash, so the session marker goes.
@@ -23,13 +25,23 @@ enum CrashHandlers {
         crashLogDescriptor = log.fileDescriptor
         sessionMarkerPath = strdup(log.sessionMarker.path)
 
-        NSSetUncaughtExceptionHandler { exception in
-            let report = """
-                \n*** Uncaught exception \(exception.name.rawValue): \(exception.reason ?? "no reason given")
-                \(exception.callStackSymbols.joined(separator: "\n"))\n
-                """
-            var text = report
-            text.withUTF8 { _ = write(crashLogDescriptor, $0.baseAddress, $0.count) }
+        // Every Objective-C exception, as it is thrown. An uncaught-exception handler isn't
+        // enough: AppKit catches an exception thrown in a layout pass and crashes the app itself
+        // (`_crashOnException:`), without that handler ever running and without the reason in
+        // macOS's crash report. The previous preprocessor is Foundation's, which records the
+        // backtrace, so it runs first.
+        previousPreprocessor = objc_setExceptionPreprocessor { thrown in
+            let exception = previousPreprocessor?(thrown) ?? thrown
+            if let exception = exception as? NSException {
+                var text = """
+                    \n*** Exception thrown (a crash follows unless something catches it): \
+                    \(exception.name.rawValue): \(exception.reason ?? "no reason given")
+                    \(exception.callStackSymbols.joined(separator: "\n"))
+                    *** End of exception\n
+                    """
+                text.withUTF8 { _ = write(crashLogDescriptor, $0.baseAddress, $0.count) }
+            }
+            return exception
         }
 
         for signal in crashSignals {
