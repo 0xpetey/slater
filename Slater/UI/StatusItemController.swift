@@ -1,6 +1,5 @@
 import AppKit
 @preconcurrency import KeyboardShortcuts
-import SwiftUI
 import Symbols
 
 /// The lizard in the menu bar and its menu. AppKit rather than SwiftUI's `MenuBarExtra`,
@@ -13,7 +12,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Symbol effects are an `NSImageView` feature, so the button hosts one instead of an image.
     private let iconView = NSImageView()
     private let menu = NSMenu()
-    private var settingsWindow: NSWindow?
 
     init(appState: AppState) {
         self.appState = appState
@@ -156,27 +154,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         appState.shots.closeAll()
     }
 
-    /// Opens SwiftUI's Settings scene by performing the ⌘, item SwiftUI puts in the app menu,
-    /// which an app with a menu bar would click. Sending `showSettingsWindow:` instead, as this
-    /// once did, is still accepted on macOS 26 but opens nothing, and SwiftUI's `openSettings`
-    /// action only works from a view inside one of its scenes. Should the app menu ever lack the
-    /// item, the view is hosted in a window of our own.
     @objc func openSettings() {
-        NSApp.activate()
-        if let appMenu = NSApp.mainMenu?.items.first?.submenu,
-           let index = appMenu.items.firstIndex(where: { $0.keyEquivalent == "," && $0.keyEquivalentModifierMask == .command }) {
-            appMenu.performActionForItem(at: index)
-            return
-        }
-        if settingsWindow == nil {
-            let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            window.title = "Slater Settings"
-            window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: SettingsView(translator: appState.translator, live: appState.live))
-            window.center()
-            settingsWindow = window
-        }
-        settingsWindow?.makeKeyAndOrderFront(nil)
+        appState.showSettings()
     }
 
     @objc private func quit() {

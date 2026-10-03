@@ -35,7 +35,7 @@ Environment: macOS 26.6, Xcode 26.6, Swift 6.3. The app **requires macOS 26.4**:
 
 | Component | Responsibility | Key APIs |
 |---|---|---|
-| `SlaterApp` | App entry point, Settings scene, `LSUIElement = YES` | SwiftUI `Settings`, `SMAppService` (launch at login) |
+| `main.swift`, `AppDelegate`, `MainMenu` | App entry point, on AppKit's lifecycle rather than SwiftUI's `App` (ADR 0004); the main menu, which a menu bar app never shows, carries ⌘, ⌘Q, ⌘W and the Edit keys for Slater's windows; `LSUIElement = YES`; launch milestones logged as time since the process started (`LaunchTiming`) | `NSApplicationMain`, `SMAppService` (launch at login) |
 | App icon | A green macOS squircle with a white circle in it, generated at every size by `scripts/make-icon.swift` into `Slater/Assets.xcassets`. | Asset catalog `AppIcon`, `ASSETCATALOG_COMPILER_APPICON_NAME` |
 | `StatusItemController` | The lizard in the menu bar, which spins while the pointer is over it, and the menu (Take Shot, Finish Setup, Open Shots, Close All, Settings, Quit), rebuilt each time it opens. AppKit, because SwiftUI's `MenuBarExtra` renders its label as a still picture and gets no hover events. | `NSStatusItem` hosting an `NSImageView` with `addSymbolEffect(.rotate, options: .repeating)` on enter and `removeSymbolEffect` on exit, `NSTrackingArea`, `NSMenu` |
 | `HotkeyManager` | Registers the global shortcut | [`KeyboardShortcuts`](https://github.com/sindresorhus/KeyboardShortcuts) package (includes a recorder UI for Settings) |
@@ -66,7 +66,7 @@ slater/
   CONTEXT.md, docs/adr/
   Slater.xcodeproj
   Slater/
-    App/        SlaterApp.swift, AppState.swift, Info.plist, Slater.entitlements
+    App/        main.swift, AppDelegate.swift, MainMenu.swift, AppState.swift, LaunchTiming.swift, Info.plist, Slater.entitlements
     Capture/    ScreenCapturer.swift, SelectionOverlayController.swift, SelectionView.swift
     OCR/        ImagePreprocessor.swift, TextRecognizer.swift, BlockGrouper.swift
     Translate/  Translator.swift

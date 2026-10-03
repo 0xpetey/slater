@@ -58,9 +58,9 @@ struct StatusItemTests {
         }
     }
 
-    /// Settings… puts a Settings window on screen. The status menu used to send SwiftUI the
-    /// `showSettingsWindow:` selector, which macOS 26 still accepts but answers with no window,
-    /// so this opens Settings the way the menu does and waits for the window.
+    /// Settings… puts a Settings window on screen: Slater's own window, since the SwiftUI
+    /// Settings scene (whose `showSettingsWindow:` macOS 26 accepts but answers with no window)
+    /// went with SwiftUI's app lifecycle (ADR 0004). Opened the way the menu does, then awaited.
     @Test @MainActor func settingsItemOpensTheSettingsWindow() async throws {
         func settingsWindow() -> NSWindow? {
             NSApp.windows.first { $0.isVisible && $0.title == "Slater Settings" }

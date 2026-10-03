@@ -19,6 +19,7 @@ final class AppState {
     let live: LiveTranslationController
     @ObservationIgnored private var hotkeys: HotkeyManager?
     @ObservationIgnored private var onboarding: OnboardingWindowController?
+    @ObservationIgnored private var settings: SettingsWindowController?
     @ObservationIgnored private let selectionOverlay = SelectionOverlayController()
     @ObservationIgnored private var isTakingShot = false
 
@@ -39,7 +40,10 @@ final class AppState {
         )
         observeLiveTranslationSetting()
         Task {
+            // Off the main thread, so the menu bar item isn't held up by the permission check.
+            await permissions.check()
             await translator.refresh()
+            LaunchTiming.log("Languages and models checked")
             if !isReady {
                 showOnboarding()
             }
@@ -47,6 +51,7 @@ final class AppState {
             // loading it now means the first Shot only pays the usual per-text time.
             translator.warmUp()
             await TextRecognizer.warmUp(languages: translator.recognitionLanguages)
+            LaunchTiming.log("Text recognition warmed up")
         }
         ScreenCapturer.warmUp()
         // macOS may unload the models while the Mac sleeps.
@@ -262,5 +267,12 @@ final class AppState {
             onboarding = OnboardingWindowController(permissions: permissions, translator: translator)
         }
         onboarding?.show()
+    }
+
+    func showSettings() {
+        if settings == nil {
+            settings = SettingsWindowController(translator: translator, live: live)
+        }
+        settings?.show()
     }
 }
