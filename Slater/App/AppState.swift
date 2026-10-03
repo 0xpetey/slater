@@ -200,8 +200,13 @@ final class AppState {
         let languages = translator.recognitionLanguages
         let script = translator.sourceScript
         // The corrected reading takes about 2.4× as long as the quick one, so it starts now and
-        // verifies the Shot once it's already on screen (ADR 0002).
-        async let correctedLines = TextReader.correctedRead(crop, pixelsPerPoint: pixelsPerPoint, languages: languages)
+        // verifies the Shot once it's already on screen (ADR 0002). At utility priority: side by
+        // side at equal priority it slowed the quick reading of a full-window crop from 0.6 s to
+        // 1.0 s, while at this priority it still lands just as soon (measured 2026-10-03).
+        let correctedReading = Task.detached(priority: .utility) {
+            try await TextReader.correctedRead(crop, pixelsPerPoint: pixelsPerPoint, languages: languages)
+        }
+        defer { correctedReading.cancel() }
         let quickLines = try await TextReader.quickRead(crop, languages: languages)
         let quickTime = milliseconds(since: started)
         let rules = RuleDetector(image: crop)
@@ -211,7 +216,7 @@ final class AppState {
         if !blocks.contains(where: { $0.kind == .source }) {
             // Rare: the quick reading may have missed faint text, so wait for the corrected one
             // before deciding there's nothing to translate.
-            blocks = BlockGrouper.group(TextReader.reconcile(quick: quickLines, corrected: try await correctedLines), source: script, hasRule: rules.hasRule)
+            blocks = BlockGrouper.group(TextReader.reconcile(quick: quickLines, corrected: try await correctedReading.value), source: script, hasRule: rules.hasRule)
             isVerified = true
             guard blocks.contains(where: { $0.kind == .source }) else {
                 logger.notice("No source text found \(milliseconds(since: started)) ms after selection")
@@ -240,7 +245,7 @@ final class AppState {
         guard !isVerified else { return }
 
         do {
-            let lines = TextReader.reconcile(quick: quickLines, corrected: try await correctedLines)
+            let lines = TextReader.reconcile(quick: quickLines, corrected: try await correctedReading.value)
             let correctedBlocks = BlockGrouper.group(lines, source: script, hasRule: rules.hasRule)
             let quickTexts = Set(blocks.map(\.text))
             let changed = correctedBlocks.count { !quickTexts.contains($0.text) }
