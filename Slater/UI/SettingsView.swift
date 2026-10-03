@@ -2,6 +2,29 @@
 import SwiftUI
 @preconcurrency import Translation
 
+/// Settings in a window of our own, since AppKit's app lifecycle has no SwiftUI Settings scene
+/// (ADR 0004). It reopens where it was left, and in the middle of the screen the first time.
+@MainActor
+final class SettingsWindowController {
+    private let window: NSWindow
+
+    init(translator: Translator, live: LiveTranslationController) {
+        window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.title = "Slater Settings"
+        window.isReleasedWhenClosed = false
+        window.contentViewController = NSHostingController(rootView: SettingsView(translator: translator, live: live))
+        if !window.setFrameUsingName("Settings") {
+            window.center()
+        }
+        window.setFrameAutosaveName("Settings")
+    }
+
+    func show() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+    }
+}
+
 struct SettingsView: View {
     let translator: Translator
     let live: LiveTranslationController

@@ -5,7 +5,14 @@ import Observation
 @MainActor
 @Observable
 final class PermissionsManager {
-    private(set) var hasScreenRecording = CGPreflightScreenCaptureAccess()
+    /// False until `check()` or `refresh()` has asked.
+    private(set) var hasScreenRecording = false
+
+    /// Asks off the main thread. The answer takes about 10 ms to come back, which would
+    /// otherwise hold up the menu bar item at launch.
+    func check() async {
+        hasScreenRecording = await Task.detached { CGPreflightScreenCaptureAccess() }.value
+    }
 
     func refresh() {
         hasScreenRecording = CGPreflightScreenCaptureAccess()

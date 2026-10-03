@@ -2,7 +2,7 @@ import AppKit
 import Observation
 import os
 
-private let logger = Logger(subsystem: "app.slater", category: "shots")
+private let logger = Log(category: "shots")
 
 private func milliseconds(since start: ContinuousClock.Instant) -> Int {
     let elapsed = ContinuousClock.now - start
@@ -19,6 +19,7 @@ final class AppState {
     let live: LiveTranslationController
     @ObservationIgnored private var hotkeys: HotkeyManager?
     @ObservationIgnored private var onboarding: OnboardingWindowController?
+    @ObservationIgnored private var settings: SettingsWindowController?
     @ObservationIgnored private let selectionOverlay = SelectionOverlayController()
     @ObservationIgnored private var isTakingShot = false
 
@@ -39,7 +40,10 @@ final class AppState {
         )
         observeLiveTranslationSetting()
         Task {
+            // Off the main thread, so the menu bar item isn't held up by the permission check.
+            await permissions.check()
             await translator.refresh()
+            LaunchTiming.log("Languages and models checked")
             if !isReady {
                 showOnboarding()
             }
@@ -47,6 +51,7 @@ final class AppState {
             // loading it now means the first Shot only pays the usual per-text time.
             translator.warmUp()
             await TextRecognizer.warmUp(languages: translator.recognitionLanguages)
+            LaunchTiming.log("Text recognition warmed up")
         }
         ScreenCapturer.warmUp()
         // macOS may unload the models while the Mac sleeps.
@@ -126,7 +131,7 @@ final class AppState {
             do {
                 try await captureAndSelect(pressedAt: pressed)
             } catch {
-                logger.error("Capture failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("Capture failed: \(error.localizedDescription)")
             }
         }
     }
@@ -155,7 +160,7 @@ final class AppState {
                 logger.notice("Captured \(captures.count) displays \(milliseconds(since: pressed)) ms after the window hotkey")
                 try await makeShot(of: selection, in: captures)
             } catch {
-                logger.error("Capture failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("Capture failed: \(error.localizedDescription)")
             }
         }
     }
@@ -195,8 +200,13 @@ final class AppState {
         let languages = translator.recognitionLanguages
         let script = translator.sourceScript
         // The corrected reading takes about 2.4× as long as the quick one, so it starts now and
-        // verifies the Shot once it's already on screen (ADR 0002).
-        async let correctedLines = TextReader.correctedRead(crop, pixelsPerPoint: pixelsPerPoint, languages: languages)
+        // verifies the Shot once it's already on screen (ADR 0002). At utility priority: side by
+        // side at equal priority it slowed the quick reading of a full-window crop from 0.6 s to
+        // 1.0 s, while at this priority it still lands just as soon (measured 2026-10-03).
+        let correctedReading = Task.detached(priority: .utility) {
+            try await TextReader.correctedRead(crop, pixelsPerPoint: pixelsPerPoint, languages: languages)
+        }
+        defer { correctedReading.cancel() }
         let quickLines = try await TextReader.quickRead(crop, languages: languages)
         let quickTime = milliseconds(since: started)
         let rules = RuleDetector(image: crop)
@@ -206,7 +216,7 @@ final class AppState {
         if !blocks.contains(where: { $0.kind == .source }) {
             // Rare: the quick reading may have missed faint text, so wait for the corrected one
             // before deciding there's nothing to translate.
-            blocks = BlockGrouper.group(TextReader.reconcile(quick: quickLines, corrected: try await correctedLines), source: script, hasRule: rules.hasRule)
+            blocks = BlockGrouper.group(TextReader.reconcile(quick: quickLines, corrected: try await correctedReading.value), source: script, hasRule: rules.hasRule)
             isVerified = true
             guard blocks.contains(where: { $0.kind == .source }) else {
                 logger.notice("No source text found \(milliseconds(since: started)) ms after selection")
@@ -235,7 +245,7 @@ final class AppState {
         guard !isVerified else { return }
 
         do {
-            let lines = TextReader.reconcile(quick: quickLines, corrected: try await correctedLines)
+            let lines = TextReader.reconcile(quick: quickLines, corrected: try await correctedReading.value)
             let correctedBlocks = BlockGrouper.group(lines, source: script, hasRule: rules.hasRule)
             let quickTexts = Set(blocks.map(\.text))
             let changed = correctedBlocks.count { !quickTexts.contains($0.text) }
@@ -253,7 +263,7 @@ final class AppState {
             await translator.translate(shot)
         } catch {
             shot.isVerified = true
-            logger.error("Corrected reading failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("Corrected reading failed: \(error.localizedDescription)")
         }
     }
 
@@ -262,5 +272,12 @@ final class AppState {
             onboarding = OnboardingWindowController(permissions: permissions, translator: translator)
         }
         onboarding?.show()
+    }
+
+    func showSettings() {
+        if settings == nil {
+            settings = SettingsWindowController(translator: translator, live: live)
+        }
+        settings?.show()
     }
 }

@@ -3,7 +3,7 @@ import Observation
 import os
 @preconcurrency import Translation
 
-private let logger = Logger(subsystem: "app.slater", category: "translation")
+private let logger = Log(category: "translation")
 
 /// On-device translation between the languages macOS can translate and Vision can read (ADR 0001).
 @MainActor
@@ -163,7 +163,7 @@ final class Translator {
         let model = requested ?? (status(of: shot.displayedModel) == .installed ? shot.displayedModel : activeModel)
         guard status(of: model) == .installed else {
             shot.setState(.failed, for: model)
-            logger.error("No \(model.title, privacy: .public) model installed")
+            logger.error("No \(model.title) model installed")
             return
         }
         let pending = shot.pendingTexts[model] ?? []
@@ -199,14 +199,14 @@ final class Translator {
         } catch {
             shot.pendingTexts[model]?.subtract(texts)
             shot.setState(.failed, for: model)
-            logger.error("Translation failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("Translation failed: \(error.localizedDescription)")
             await refresh()
         }
         // Counts and timings only, never text (ADR 0001).
         let lengths = texts.map(\.count)
         logger.notice("""
             Translated \(texts.count) texts (\(lengths.reduce(0, +)) characters, longest \(lengths.max() ?? 0)) with the \
-            \(model.title, privacy: .public) model: first result after \(firstResult.map { milliseconds($0) } ?? -1) ms, \
+            \(model.title) model: first result after \(firstResult.map { milliseconds($0) } ?? -1) ms, \
             all after \(milliseconds(ContinuousClock.now - started)) ms
             """)
     }

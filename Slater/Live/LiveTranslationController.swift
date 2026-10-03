@@ -4,7 +4,7 @@ import Observation
 import os
 import ScreenCaptureKit
 
-private let logger = Logger(subsystem: "app.slater", category: "live")
+private let logger = Log(category: "live")
 
 /// Experimental: translates every source-language Block on the whole screen, or in one window,
 /// as it changes, built for watching a shared Japanese presentation on a video call.
@@ -93,7 +93,7 @@ final class LiveTranslationController {
                 try await start(onWindow: id)
             }
         } catch {
-            logger.error("Live translation failed to start: \(error.localizedDescription, privacy: .public)")
+            logger.error("Live translation failed to start: \(error.localizedDescription)")
             stop()
         }
     }

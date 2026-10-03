@@ -1,7 +1,7 @@
 import AppKit
 import os
 
-private let logger = Logger(subsystem: "app.slater", category: "shots")
+private let logger = Log(category: "shots")
 
 /// The full-screen selection: a dim layer with a crosshair, on which the user drags a box.
 ///

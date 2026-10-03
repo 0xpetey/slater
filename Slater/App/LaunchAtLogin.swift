@@ -1,7 +1,7 @@
 import os
 import ServiceManagement
 
-private let logger = Logger(subsystem: "app.slater", category: "setup")
+private let logger = Log(category: "setup")
 
 /// Opens Slater when the user logs in, so the hotkey always works.
 @MainActor
@@ -16,7 +16,7 @@ enum LaunchAtLogin {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                logger.error("Couldn't change launch at login: \(error.localizedDescription, privacy: .public)")
+                logger.error("Couldn't change launch at login: \(error.localizedDescription)")
             }
         }
     }

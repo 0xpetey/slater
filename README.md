@@ -40,6 +40,10 @@ Slater needs Screen Recording permission to read the screen. macOS ties this per
 tccutil reset ScreenCapture app.slater
 ```
 
+## Logs and crash reports
+
+Slater keeps a log at `~/Library/Logs/Slater/Slater.log`: timings, counts and error messages, never text from your screen. After a crash, the next launch saves a report in `~/Library/Logs/Slater/Reports/` and offers to open a GitHub issue; **Report a Problem…** in the menu saves one at any time. The report is a text file that starts with the steps for posting it: open a [new issue](https://github.com/0xpetey/slater/issues/new), describe what you were doing, and drag the file into the description. Nothing is sent on its own (ADR 0005).
+
 ## License
 
 MIT. See `LICENSE`.

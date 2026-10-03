@@ -35,11 +35,11 @@ Environment: macOS 26.6, Xcode 26.6, Swift 6.3. The app **requires macOS 26.4**:
 
 | Component | Responsibility | Key APIs |
 |---|---|---|
-| `SlaterApp` | App entry point, Settings scene, `LSUIElement = YES` | SwiftUI `Settings`, `SMAppService` (launch at login) |
+| `main.swift`, `AppDelegate`, `MainMenu` | App entry point, on AppKit's lifecycle rather than SwiftUI's `App` (ADR 0004); the main menu, which a menu bar app never shows, carries ⌘, ⌘Q, ⌘W and the Edit keys for Slater's windows; `LSUIElement = YES`; launch milestones logged as time since the process started (`LaunchTiming`) | `NSApplicationMain`, `SMAppService` (launch at login) |
 | App icon | A green macOS squircle with a white circle in it, generated at every size by `scripts/make-icon.swift` into `Slater/Assets.xcassets`. | Asset catalog `AppIcon`, `ASSETCATALOG_COMPILER_APPICON_NAME` |
 | `StatusItemController` | The lizard in the menu bar, which spins while the pointer is over it, and the menu (Take Shot, Finish Setup, Open Shots, Close All, Settings, Quit), rebuilt each time it opens. AppKit, because SwiftUI's `MenuBarExtra` renders its label as a still picture and gets no hover events. | `NSStatusItem` hosting an `NSImageView` with `addSymbolEffect(.rotate, options: .repeating)` on enter and `removeSymbolEffect` on exit, `NSTrackingArea`, `NSMenu` |
 | `HotkeyManager` | Registers the global shortcut | [`KeyboardShortcuts`](https://github.com/sindresorhus/KeyboardShortcuts) package (includes a recorder UI for Settings) |
-| `ScreenCapturer` | Captures each display at native resolution, excluding Slater's own windows. Keeps the display list fetched ahead of time and makes a throwaway capture at launch, because the first capture in a process costs about 70 ms more. | ScreenCaptureKit: `SCShareableContent`, `SCContentFilter(display:excludingApplications: [Slater], exceptingWindows: [])`, `SCScreenshotManager.captureImage(contentFilter:configuration:)` |
+| `ScreenCapturer` | Captures each display at native resolution, excluding Slater's own windows. Keeps the display list fetched ahead of time and makes a throwaway capture at launch, because the first capture in a process costs about 70 ms more. ScreenCaptureKit lists Slater only while it has a window on screen, so the list is refetched until Slater is in it only while it has one (the selection overlay, a Shot); a Shot of the front window has none and doesn't wait. | ScreenCaptureKit: `SCShareableContent`, `SCContentFilter(display:excludingApplications: [Slater], exceptingWindows: [])`, `SCScreenshotManager.captureImage(contentFilter:configuration:)` |
 | `SelectionOverlayController` | One borderless, transparent `NSPanel` per screen at `.screenSaver` level, shown the instant the hotkey is pressed; frozen with the Captures when they land; draws the rectangle as you drag. A box finished before the capture lands is kept and used once it does. | `NSPanel`, `NSView` mouse events, `NSCursor.crosshair` |
 | `CoordinateMapper` | Converts between AppKit points (origin bottom-left, spans all screens), capture pixels (origin top-left, Retina scale) and Vision's normalized boxes (origin bottom-left) | Pure functions, unit-tested |
 | `ImagePreprocessor` | Makes the second OCR copy: on Retina captures the crop at half scale (where Vision reads gothic fonts' 当 correctly and blur is crisper); on 1× captures upscaled to about 3 px per point with grayscale and contrast. No straightening: Vision read 2–3° rotated scans correctly. | Core Image (`CILanczosScaleTransform`, `CIColorControls`) |
@@ -54,6 +54,7 @@ Environment: macOS 26.6, Xcode 26.6, Swift 6.3. The app **requires macOS 26.4**:
 | `ShotExporter` | Writes a Shot to disk in the format you chose: a PDF (from `ShotPDF`), the original and translated PNGs, or a Markdown file with Japanese ↔ English per Block | `NSSavePanel` with an accessory view for the format dropdown, `ImageRenderer`, `UserDefaults` for the last format used (the format only, never any content) |
 | `ShotPDF` | One Letter-size PDF: the translated view, the original, and the text pages; an invisible text layer over both images makes the English and the Japanese selectable and searchable | Core Graphics PDF context, Core Text (`CTLineDraw` with `.invisible` text mode, `CTFramesetter` for pagination) |
 | `DetailsPanel` | Japanese ↔ English list for a Shot, with copy buttons | SwiftUI, `NSPasteboard` |
+| `DiagnosticLog`, `CrashHandlers`, `ProblemReport`, `ProblemReporter` | Slater's own log file in `~/Library/Logs/Slater`, written unbuffered (timings and counts only); the crashing thread's backtrace added by signal and exception handlers; after a session that didn't quit cleanly, and from Report a Problem… in the menu, a report file with the steps for posting it as a GitHub issue, the log and macOS's `.ips` (ADR 0005) | `sigaction`, `backtrace_symbols_fd`, `NSSetUncaughtExceptionHandler`, `NSAlert` |
 | `PermissionsManager` | Screen Recording permission check and prompt; first-run onboarding | `CGPreflightScreenCaptureAccess`, `CGRequestScreenCaptureAccess`, a link to System Settings |
 
 The pipeline is a single `async` function started by the hotkey:
@@ -66,12 +67,13 @@ slater/
   CONTEXT.md, docs/adr/
   Slater.xcodeproj
   Slater/
-    App/        SlaterApp.swift, AppState.swift, Info.plist, Slater.entitlements
+    App/        main.swift, AppDelegate.swift, MainMenu.swift, AppState.swift, LaunchTiming.swift, Info.plist, Slater.entitlements
     Capture/    ScreenCapturer.swift, SelectionOverlayController.swift, SelectionView.swift
     OCR/        ImagePreprocessor.swift, TextRecognizer.swift, BlockGrouper.swift
     Translate/  Translator.swift
     Shots/      Shot.swift, ShotStore.swift, ShotWindowController.swift, ShotView.swift, DetailsPanel.swift, ShotExporter.swift
     UI/         StatusItemController.swift, SettingsView.swift, OnboardingView.swift, NoticePanel.swift
+    Diagnostics/ DiagnosticLog.swift, CrashHandlers.swift, ProblemReport.swift, ProblemReporter.swift
     Util/       CoordinateMapper.swift, ColorSampler.swift, FitText.swift
   SlaterTests/  BlockGrouperTests, CoordinateMapperTests, fixture images (web, PDF, spreadsheet, poor scan)
 ```

@@ -2,7 +2,7 @@ import AppKit
 import os
 import ScreenCaptureKit
 
-private let logger = Logger(subsystem: "app.slater", category: "capture")
+private let logger = Log(category: "capture")
 
 /// One display's pixels at the moment the hotkey was pressed.
 struct DisplayCapture: Sendable {
@@ -50,25 +50,36 @@ enum ScreenCapturer {
         application.processID == ProcessInfo.processInfo.processIdentifier
     }
 
-    /// Captures every display at native resolution. Slater's own windows (open Shots, menus,
-    /// onboarding) are excluded, so a new Shot always sees the content underneath.
+    /// Whether a window of Slater's other than the menu bar item is on screen: the selection
+    /// overlay, a Shot, onboarding, Settings or a notice, which a capture has to exclude.
+    static var hasWindowsOnScreen: Bool {
+        NSApp.windows.contains { $0.isVisible && $0.level != .statusBar }
+    }
+
+    /// Captures every display at native resolution. Slater's own windows (the selection
+    /// overlay, open Shots, onboarding) are excluded, so a new Shot always sees the content
+    /// underneath. ScreenCaptureKit lists Slater only while it has a window on screen, and one
+    /// just ordered front can take a moment to show up, so while Slater has windows the list is
+    /// refetched until it's in it. With none, as for a Shot of the front window, there is nothing
+    /// to exclude and nothing to wait for; waiting anyway used to cost such a Shot a second.
     static func captureAllDisplays() async throws -> [DisplayCapture] {
         let content: SCShareableContent
-        let slater: [SCRunningApplication]
-        if let cached = Self.content, !cached.applications.filter(isSlater).isEmpty {
+        let mustListSlater = hasWindowsOnScreen
+        if let cached = Self.content, !mustListSlater || !cached.applications.filter(isSlater).isEmpty {
             content = cached
-            slater = cached.applications.filter(isSlater)
+        } else if mustListSlater {
+            // The cached list may predate Slater's first window; fetch again rather than capture it.
+            content = try await contentListingSlater().content
+            if content.applications.filter(isSlater).isEmpty {
+                logger.error("Slater isn't listed by ScreenCaptureKit; the capture may include its own windows")
+            }
         } else {
-            // The cached list may predate Slater's first window; the selection overlay is up
-            // now, so fetch again rather than capture it.
-            (content, slater) = try await contentListingSlater()
+            content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         }
+        let slater = content.applications.filter(isSlater)
         // Windows come and go, which is harmless since the filter is by application, but keep
         // the list fresh for the next Shot anyway.
         defer { warmUp() }
-        if slater.isEmpty {
-            logger.error("Slater isn't listed by ScreenCaptureKit; the capture may include the selection overlay")
-        }
 
         var captures: [DisplayCapture] = []
         for display in content.displays {
