@@ -2,7 +2,7 @@ import AppKit
 import Observation
 import os
 
-private let logger = Logger(subsystem: "app.slater", category: "shots")
+private let logger = Log(category: "shots")
 
 private func milliseconds(since start: ContinuousClock.Instant) -> Int {
     let elapsed = ContinuousClock.now - start
@@ -131,7 +131,7 @@ final class AppState {
             do {
                 try await captureAndSelect(pressedAt: pressed)
             } catch {
-                logger.error("Capture failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("Capture failed: \(error.localizedDescription)")
             }
         }
     }
@@ -160,7 +160,7 @@ final class AppState {
                 logger.notice("Captured \(captures.count) displays \(milliseconds(since: pressed)) ms after the window hotkey")
                 try await makeShot(of: selection, in: captures)
             } catch {
-                logger.error("Capture failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("Capture failed: \(error.localizedDescription)")
             }
         }
     }
@@ -263,7 +263,7 @@ final class AppState {
             await translator.translate(shot)
         } catch {
             shot.isVerified = true
-            logger.error("Corrected reading failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("Corrected reading failed: \(error.localizedDescription)")
         }
     }
 

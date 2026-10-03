@@ -54,6 +54,7 @@ Environment: macOS 26.6, Xcode 26.6, Swift 6.3. The app **requires macOS 26.4**:
 | `ShotExporter` | Writes a Shot to disk in the format you chose: a PDF (from `ShotPDF`), the original and translated PNGs, or a Markdown file with Japanese ↔ English per Block | `NSSavePanel` with an accessory view for the format dropdown, `ImageRenderer`, `UserDefaults` for the last format used (the format only, never any content) |
 | `ShotPDF` | One Letter-size PDF: the translated view, the original, and the text pages; an invisible text layer over both images makes the English and the Japanese selectable and searchable | Core Graphics PDF context, Core Text (`CTLineDraw` with `.invisible` text mode, `CTFramesetter` for pagination) |
 | `DetailsPanel` | Japanese ↔ English list for a Shot, with copy buttons | SwiftUI, `NSPasteboard` |
+| `DiagnosticLog`, `CrashHandlers`, `ProblemReport`, `ProblemReporter` | Slater's own log file in `~/Library/Logs/Slater`, written unbuffered (timings and counts only); the crashing thread's backtrace added by signal and exception handlers; after a session that didn't quit cleanly, and from Report a Problem… in the menu, a report file with the steps for posting it as a GitHub issue, the log and macOS's `.ips` (ADR 0005) | `sigaction`, `backtrace_symbols_fd`, `NSSetUncaughtExceptionHandler`, `NSAlert` |
 | `PermissionsManager` | Screen Recording permission check and prompt; first-run onboarding | `CGPreflightScreenCaptureAccess`, `CGRequestScreenCaptureAccess`, a link to System Settings |
 
 The pipeline is a single `async` function started by the hotkey:
@@ -72,6 +73,7 @@ slater/
     Translate/  Translator.swift
     Shots/      Shot.swift, ShotStore.swift, ShotWindowController.swift, ShotView.swift, DetailsPanel.swift, ShotExporter.swift
     UI/         StatusItemController.swift, SettingsView.swift, OnboardingView.swift, NoticePanel.swift
+    Diagnostics/ DiagnosticLog.swift, CrashHandlers.swift, ProblemReport.swift, ProblemReporter.swift
     Util/       CoordinateMapper.swift, ColorSampler.swift, FitText.swift
   SlaterTests/  BlockGrouperTests, CoordinateMapperTests, fixture images (web, PDF, spreadsheet, poor scan)
 ```

@@ -106,6 +106,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        menu.addItem(item("Report a Problem…", #selector(reportProblem)))
         menu.addItem(item("Settings…", #selector(openSettings), key: ","))
         menu.addItem(item("Quit Slater", #selector(quit), key: "q"))
     }
@@ -156,6 +157,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc func openSettings() {
         appState.showSettings()
+    }
+
+    @objc private func reportProblem() {
+        ProblemReporter.present()
     }
 
     @objc private func quit() {

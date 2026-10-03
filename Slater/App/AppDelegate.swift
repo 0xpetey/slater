@@ -18,6 +18,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         LaunchTiming.log("Menu bar item and hotkeys up")
         LaunchTiming.logFirstIdle()
         installMainMenuOnceAWindowIsKey()
+        // Once the menu bar item and hotkeys are up, and from the run loop rather than a task:
+        // a modal alert inside a main-actor task stalls every other one until it's dismissed.
+        RunLoop.main.perform {
+            MainActor.assumeIsolated { ProblemReporter.offerCrashReportIfNeeded() }
+        }
+        #if DEBUG
+        ProblemReporter.crashForTestingIfAsked()
+        #endif
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        ProblemReporter.sessionEnded()
     }
 
     /// The main menu's key equivalents matter once one of Slater's windows is key, so building

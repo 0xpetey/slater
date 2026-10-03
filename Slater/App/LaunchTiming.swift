@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "app.slater", category: "launch")
+private let logger = Log(category: "launch")
 
 /// Milestones of a launch, logged as time since the kernel started the process, so that a slow
 /// launch can be read in Console and launches compared across builds. Timings only (ADR 0001).
@@ -20,7 +20,7 @@ enum LaunchTiming {
     }
 
     static func log(_ milestone: String) {
-        logger.notice("Launch: \(milestone, privacy: .public) \(millisecondsSinceProcessStart()) ms after the process started")
+        logger.notice("Launch: \(milestone) \(millisecondsSinceProcessStart()) ms after the process started")
     }
 
     /// Logs the first time the main thread has nothing left to do: the menu bar item has been

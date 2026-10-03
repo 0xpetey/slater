@@ -2,7 +2,7 @@ import AppKit
 import os
 import ScreenCaptureKit
 
-private let logger = Logger(subsystem: "app.slater", category: "capture")
+private let logger = Log(category: "capture")
 
 /// One display's pixels at the moment the hotkey was pressed.
 struct DisplayCapture: Sendable {
