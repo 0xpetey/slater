@@ -36,7 +36,7 @@ enum TextReader {
 
     /// Pairs up the Lines that cover the same text in each reading. Where the readings agree
     /// the Line is trusted. Where they differ: a reading with a suspected merged glyph loses to
-    /// one without; then the longer text wins, because lost characters are the usual failure;
+    /// one without, unless it's the only reading that found the text; then the longer text wins, because lost characters are the usual failure;
     /// a tie goes to the corrected reading, whose misreads are rarer. Either way the Line is
     /// marked low-confidence.
     static func reconcile(quick: [Line], corrected: [Line]) -> [Line] {
@@ -57,7 +57,12 @@ enum TextReader {
             let quickMerged = quickLines.contains(where: \.hasSuspectedMerge)
             let correctedMerged = correctedLines.contains(where: \.hasSuspectedMerge)
             let chosen: [Line]
-            if !quickText.isEmpty, quickMerged != correctedMerged {
+            // A cluster always has a Line from one reading, not always from both, and a reading
+            // with none here can't be chosen: a suspected merge in the only reading that found
+            // the text used to pick the other, empty one, and crash on its first Line.
+            if quickLines.isEmpty || correctedLines.isEmpty {
+                chosen = quickLines.isEmpty ? correctedLines : quickLines
+            } else if !quickText.isEmpty, quickMerged != correctedMerged {
                 chosen = quickMerged ? correctedLines : quickLines
             } else {
                 chosen = quickText.count > correctedText.count ? quickLines : correctedLines
