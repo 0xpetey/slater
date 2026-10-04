@@ -46,10 +46,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let keyWindowObserver else { return }
         NotificationCenter.default.removeObserver(keyWindowObserver)
         self.keyWindowObserver = nil
-        NSApp.mainMenu = MainMenu.make(settingsAction: #selector(openSettings), target: self)
+        NSApp.mainMenu = MainMenu.make(settingsAction: #selector(openSettings), helpAction: #selector(openHelp), target: self)
     }
 
     @objc private func openSettings(_ sender: Any?) {
         appState.showSettings()
+    }
+
+    @objc private func openHelp(_ sender: Any?) {
+        appState.showHelp()
     }
 }

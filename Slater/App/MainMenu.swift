@@ -1,12 +1,12 @@
 import AppKit
 
 /// The main menu. A menu bar app never shows it, but its key equivalents work in Slater's
-/// windows: ⌘, and ⌘Q, ⌘W to close one, and the Edit menu's, without which the text fields in
+/// windows: ⌘, and ⌘Q, ⌘? for Slater Help, ⌘W to close one, and the Edit menu's, without which the text fields in
 /// Settings and onboarding couldn't copy or paste. Built by hand, with only these: SwiftUI's
 /// `App` built one with every standard item, as part of the launch cost that ADR 0004 removed.
 @MainActor
 enum MainMenu {
-    static func make(settingsAction: Selector, target: AnyObject) -> NSMenu {
+    static func make(settingsAction: Selector, helpAction: Selector, target: AnyObject) -> NSMenu {
         let main = NSMenu()
 
         let app = NSMenu(title: "Slater")
@@ -34,6 +34,11 @@ enum MainMenu {
         window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         main.addItem(submenu: window)
         NSApp.windowsMenu = window
+
+        let help = NSMenu(title: "Help")
+        let slaterHelp = help.addItem(withTitle: "Slater Help", action: helpAction, keyEquivalent: "?")
+        slaterHelp.target = target
+        main.addItem(submenu: help)
 
         return main
     }

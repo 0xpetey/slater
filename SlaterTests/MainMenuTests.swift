@@ -7,13 +7,15 @@ import Testing
 struct MainMenuTests {
     @Test @MainActor func keyEquivalentsForSlatersWindows() throws {
         let target = NSObject()
-        let main = MainMenu.make(settingsAction: #selector(NSApplication.terminate(_:)), target: target)
+        let main = MainMenu.make(settingsAction: #selector(NSApplication.terminate(_:)), helpAction: #selector(NSApplication.terminate(_:)), target: target)
         let items = main.items.compactMap(\.submenu).flatMap(\.items)
         func item(_ key: String) -> NSMenuItem? {
             items.first { $0.keyEquivalent == key && $0.keyEquivalentModifierMask == .command }
         }
         #expect(item(",")?.title == "Settings…")
         #expect(item(",")?.target === target)
+        #expect(item("?")?.title == "Slater Help")
+        #expect(item("?")?.target === target)
         #expect(item("q")?.action == #selector(NSApplication.terminate(_:)))
         #expect(item("w")?.action == #selector(NSWindow.performClose(_:)))
         #expect(item("c")?.action == #selector(NSText.copy(_:)))

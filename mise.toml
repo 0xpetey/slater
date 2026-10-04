@@ -1,3 +1,22 @@
 [tools]
 node = "latest"
 xcodegen = "latest"
+
+[tasks.install]
+description = "Build Slater (Release) and copy it into /Applications"
+run = '''
+set -euo pipefail
+xcodegen generate
+xcodebuild -project Slater.xcodeproj -scheme Slater -configuration Release -derivedDataPath build/DerivedData build
+# A running copy is quit before it is replaced, and opened again afterwards.
+was_running=false
+if pgrep -x Slater >/dev/null; then
+  was_running=true
+  osascript -e 'quit app id "app.slater"'
+  while pgrep -x Slater >/dev/null; do sleep 0.2; done
+fi
+rm -rf /Applications/Slater.app
+ditto build/DerivedData/Build/Products/Release/Slater.app /Applications/Slater.app
+echo "Installed /Applications/Slater.app"
+if $was_running; then open /Applications/Slater.app; fi
+'''
