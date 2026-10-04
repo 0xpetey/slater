@@ -20,6 +20,7 @@ final class AppState {
     @ObservationIgnored private var hotkeys: HotkeyManager?
     @ObservationIgnored private var onboarding: OnboardingWindowController?
     @ObservationIgnored private var settings: SettingsWindowController?
+    @ObservationIgnored private var help: HelpWindowController?
     @ObservationIgnored private let selectionOverlay = SelectionOverlayController()
     @ObservationIgnored private var isTakingShot = false
 
@@ -269,15 +270,22 @@ final class AppState {
 
     func showOnboarding() {
         if onboarding == nil {
-            onboarding = OnboardingWindowController(permissions: permissions, translator: translator)
+            onboarding = OnboardingWindowController(permissions: permissions, translator: translator) { [weak self] in self?.showHelp() }
         }
         onboarding?.show()
     }
 
     func showSettings() {
         if settings == nil {
-            settings = SettingsWindowController(translator: translator, live: live)
+            settings = SettingsWindowController(translator: translator, live: live) { [weak self] in self?.showHelp() }
         }
         settings?.show()
+    }
+
+    func showHelp() {
+        if help == nil {
+            help = HelpWindowController(live: live) { [weak self] in self?.showSettings() }
+        }
+        help?.show()
     }
 }

@@ -8,11 +8,12 @@ import SwiftUI
 final class SettingsWindowController {
     private let window: NSWindow
 
-    init(translator: Translator, live: LiveTranslationController) {
+    /// `onHelp` opens Slater Help, for the button at the foot of the window.
+    init(translator: Translator, live: LiveTranslationController, onHelp: @escaping () -> Void) {
         window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Slater Settings"
         window.isReleasedWhenClosed = false
-        window.contentViewController = NSHostingController(rootView: SettingsView(translator: translator, live: live))
+        window.contentViewController = NSHostingController(rootView: SettingsView(translator: translator, live: live, onHelp: onHelp))
         if !window.setFrameUsingName("Settings") {
             window.center()
         }
@@ -28,6 +29,7 @@ final class SettingsWindowController {
 struct SettingsView: View {
     let translator: Translator
     let live: LiveTranslationController
+    let onHelp: () -> Void
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var fastDownload: TranslationSession.Configuration?
     @State private var accurateDownload: TranslationSession.Configuration?
@@ -74,6 +76,13 @@ struct SettingsView: View {
                     KeyboardShortcuts.Recorder("Live Window:", name: .toggleLiveWindowTranslation)
                     KeyboardShortcuts.Recorder("Freeze Live Screen:", name: .freezeLiveTranslation)
                 }
+            }
+
+            Section("Help") {
+                Button("Slater Help", action: onHelp)
+                Text("A few pages that walk through what Slater does.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         }
         // Asks macOS to download a model, showing its own confirmation dialog.

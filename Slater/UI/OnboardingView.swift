@@ -6,7 +6,8 @@ import SwiftUI
 final class OnboardingWindowController {
     private let window: NSWindow
 
-    init(permissions: PermissionsManager, translator: Translator) {
+    /// `onTour` opens Slater Help, for Show Me Around.
+    init(permissions: PermissionsManager, translator: Translator, onTour: @escaping () -> Void) {
         window = NSWindow(
             contentRect: .zero,
             styleMask: [.titled, .closable],
@@ -16,7 +17,14 @@ final class OnboardingWindowController {
         window.title = "Welcome to Slater"
         window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(
-            rootView: OnboardingView(permissions: permissions, translator: translator) { [weak window] in window?.close() }
+            rootView: OnboardingView(
+                permissions: permissions, translator: translator,
+                onTour: { [weak window] in
+                    window?.close()
+                    onTour()
+                },
+                onDone: { [weak window] in window?.close() }
+            )
         )
     }
 
@@ -30,6 +38,7 @@ final class OnboardingWindowController {
 struct OnboardingView: View {
     let permissions: PermissionsManager
     let translator: Translator
+    let onTour: () -> Void
     let onDone: () -> Void
     @State private var fastDownload: TranslationSession.Configuration?
     @State private var accurateDownload: TranslationSession.Configuration?
@@ -93,15 +102,17 @@ struct OnboardingView: View {
 
             HStack {
                 Spacer()
+                Button("Show Me Around") {
+                    applyLaunchAtLogin()
+                    onTour()
+                }
                 Button("Done") {
-                    if launchAtLogin != LaunchAtLogin.isEnabled {
-                        LaunchAtLogin.isEnabled = launchAtLogin
-                    }
+                    applyLaunchAtLogin()
                     onDone()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!permissions.hasScreenRecording || translator.fastModel != .installed)
             }
+            .disabled(!permissions.hasScreenRecording || translator.fastModel != .installed)
         }
         .padding(20)
         .frame(width: 460)
@@ -111,6 +122,14 @@ struct OnboardingView: View {
                 try? await Task.sleep(for: .seconds(1))
                 permissions.refresh()
             }
+        }
+    }
+}
+
+private extension OnboardingView {
+    func applyLaunchAtLogin() {
+        if launchAtLogin != LaunchAtLogin.isEnabled {
+            LaunchAtLogin.isEnabled = launchAtLogin
         }
     }
 }
